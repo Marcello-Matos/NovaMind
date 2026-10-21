@@ -236,6 +236,38 @@ export const TOOL_DEFINITIONS: Record<string, ToolDefinition> = {
       },
     },
   },
+  organize_day: {
+    sensitive: false,
+    spec: {
+      type: 'function',
+      function: {
+        name: 'organize_day',
+        description:
+          'Monta um cronograma inteligente para um dia, cruzando compromissos, ' +
+          'tarefas pendentes, prioridades e tempo livre. Use quando o usuário ' +
+          'pedir para organizar o dia/planejar a rotina.',
+        parameters: {
+          type: 'object',
+          properties: {
+            date: {
+              type: 'string',
+              description:
+                'Dia a organizar em yyyy-mm-dd (padrão: amanhã)',
+            },
+            workStart: {
+              type: 'string',
+              description: 'Início da jornada em HH:mm (padrão 08:00)',
+            },
+            workEnd: {
+              type: 'string',
+              description: 'Fim da jornada em HH:mm (padrão 19:00)',
+            },
+          },
+          required: [],
+        },
+      },
+    },
+  },
   send_message: {
     sensitive: true,
     spec: {

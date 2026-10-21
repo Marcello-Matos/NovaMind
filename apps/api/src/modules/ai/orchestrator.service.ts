@@ -193,6 +193,39 @@ export class OrchestratorService {
           .join('\n')}`
       : '';
 
+    // Data/hora atual (UTC-3, Brasília) para resolver "hoje", "amanhã", "sexta".
+    const now = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    const weekday = [
+      'domingo',
+      'segunda-feira',
+      'terça-feira',
+      'quarta-feira',
+      'quinta-feira',
+      'sexta-feira',
+      'sábado',
+    ][now.getUTCDay()];
+    const dateContext =
+      `\n\nData/hora atual: ${weekday}, ${now.toISOString().slice(0, 10)} ` +
+      `${now.toISOString().slice(11, 16)} (horário de Brasília). ` +
+      'Compromissos com data/hora: create_calendar_event. ' +
+      'Lembretes com notificação no aparelho: create_reminder.';
+
+    const proactive =
+      agent === AgentType.PERSONAL || !organizationId
+        ? '\n\nComportamento proativo (essencial):\n' +
+          '- Compromissos: proponha via create_calendar_event e, depois que o ' +
+          'usuário confirmar, ofereça lembrete antecipado ("Quer que eu te ' +
+          'lembre 1 hora antes?"). Se aceitar, crie com create_reminder ' +
+          '60min antes do início.\n' +
+          '- Obrigações com prazo ("pagar a conta até sexta"): crie lembrete ' +
+          'no fim da tarde do dia anterior (ex.: quinta às 18h) sem ' +
+          'perguntar — apenas informe que criou e para quando.\n' +
+          '- "Organize meu dia/de amanhã": use organize_day e apresente o ' +
+          'cronograma como lista limpa (hora — item), oferecendo ajustes.\n' +
+          '- NUNCA afirme que executou algo sem a ferramenta ter rodado; ' +
+          'ações sensíveis (agenda) aguardam o cartão de confirmação.'
+        : '';
+
     if (agent === AgentType.PERSONAL || !organizationId) {
       return (
         'Você é o NovaMind, assistente pessoal em português do Brasil. ' +
@@ -201,6 +234,8 @@ export class OrchestratorService {
         'controladas. Regras: (1) nunca invente ações concluídas; (2) ações ' +
         'sensíveis exigem confirmação do usuário; (3) responda de forma direta e ' +
         'objetiva; (4) não exponha dados de outros usuários ou organizações.' +
+        dateContext +
+        proactive +
         memoryBlock
       );
     }

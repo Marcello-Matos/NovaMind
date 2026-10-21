@@ -242,6 +242,9 @@ export class ToolExecutorService {
         return { habit: habit.name, date: day.toISOString().slice(0, 10), done: true };
       }
 
+      case 'organize_day':
+        return this.organizeDay(ctx, args);
+
       case 'send_message':
         // Integrações externas entram na fase de automações (semanas 7–8).
         return {
@@ -254,5 +257,165 @@ export class ToolExecutorService {
       default:
         return { error: `Ferramenta não implementada: ${name}` };
     }
+  }
+
+  /**
+   * Cronograma inteligente: ocupa a jornada com compromissos fixos e
+   * preenche os vãos com tarefas pendentes (prioridade > prazo > criação),
+   * intercalando pausas e respeitando a duração estimada de cada tarefa.
+   */
+  private async organizeDay(ctx: ToolContext, args: Record<string, unknown>) {
+    const dateStr = String(args.date ?? this.tomorrow());
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return { error: 'date deve ser yyyy-mm-dd' };
+    }
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dayStart = new Date(Date.UTC(y, m - 1, d, 0, 0));
+    const dayEnd = new Date(Date.UTC(y, m - 1, d, 23, 59, 59));
+
+    const [events, tasks, habits] = await Promise.all([
+      this.prisma.calendarEvent.findMany({
+        where: {
+          OR: [
+            { ownerId: ctx.userId },
+            ...(ctx.organizationId
+              ? [{ organizationId: ctx.organizationId }]
+              : []),
+          ],
+          startsAt: { gte: dayStart, lte: dayEnd },
+        },
+        orderBy: { startsAt: 'asc' },
+      }),
+      this.prisma.task.findMany({
+        where: {
+          OR: [
+            { ownerId: ctx.userId },
+            ...(ctx.organizationId
+              ? [{ organizationId: ctx.organizationId }]
+              : []),
+          ],
+          status: { not: 'DONE' },
+        },
+        orderBy: [
+          { priority: 'desc' },
+          { dueAt: { sort: 'asc', nulls: 'last' } },
+          { createdAt: 'asc' },
+        ],
+        take: 20,
+      }),
+      this.prisma.habit.findMany({
+        where: {
+          ownerId: ctx.userId,
+          active: true,
+          daysOfWeek: { contains: String(dayStart.getUTCDay()) },
+        },
+      }),
+    ]);
+
+    type Block = {
+      start: number;
+      end: number;
+      label: string;
+      kind: 'EVENTO' | `TAREFA (${string})` | 'PAUSA';
+      ref: string | null;
+    };
+
+    // Compromissos fixos (minutos desde a meia-noite)
+    const occupied: Block[] = events
+      .map((e) => {
+        const s = new Date(e.startsAt);
+        const end = e.endsAt ?? new Date(s.getTime() + 60 * 60 * 1000);
+        return {
+          start: s.getUTCHours() * 60 + s.getUTCMinutes(),
+          end: Math.max(
+            end.getUTCHours() * 60 + end.getUTCMinutes(),
+            s.getUTCHours() * 60 + s.getUTCMinutes() + 15,
+          ),
+          label: e.title,
+          kind: 'EVENTO' as const,
+          ref: e.id,
+        };
+      })
+      .sort((a, b) => a.start - b.start);
+
+    const parseHm = (hm: unknown, fallback: number) => {
+      const mt = /^(\d{1,2}):(\d{2})$/.exec(String(hm ?? ''));
+      return mt ? Number(mt[1]) * 60 + Number(mt[2]) : fallback;
+    };
+    const workStart = parseHm(args.workStart, 8 * 60);
+    const workEnd = parseHm(args.workEnd, 19 * 60);
+
+    // Duração estimada por prioridade (P1: 60min, P2: 45, P3: 30)
+    const durationFor = (p: string) =>
+      p === 'P1' ? 60 : p === 'P2' ? 45 : 30;
+
+    const blocks: Block[] = [...occupied];
+    const freeTasks = [...tasks];
+    const minBlock = 25;
+
+    const scheduleTasks = (from: number, to: number) => {
+      let cursor = Math.max(from, workStart);
+      const limit = Math.min(to, workEnd);
+      while (cursor < limit && freeTasks.length) {
+        const task = freeTasks[0];
+        const dur = Math.min(durationFor(task.priority), limit - cursor);
+        if (dur < minBlock) break;
+        freeTasks.shift();
+        blocks.push({
+          start: cursor,
+          end: cursor + dur,
+          label: task.title,
+          kind: `TAREFA (${task.priority})`,
+          ref: task.id,
+        });
+        cursor += dur;
+        // Pausa de 10min entre blocos de trabalho
+        if (cursor + 10 < limit) {
+          blocks.push({
+            start: cursor,
+            end: cursor + 10,
+            label: 'Pausa',
+            kind: 'PAUSA',
+            ref: null,
+          });
+          cursor += 10;
+        }
+      }
+    };
+
+    let prevEnd = workStart;
+    for (const occ of occupied) {
+      if (occ.start > prevEnd) scheduleTasks(prevEnd, occ.start);
+      prevEnd = Math.max(prevEnd, occ.end);
+    }
+    scheduleTasks(prevEnd, workEnd);
+
+    blocks.sort((a, b) => a.start - b.start);
+    const fmt = (min: number) =>
+      `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+
+    return {
+      date: dateStr,
+      schedule: blocks.map((b) => ({
+        inicio: fmt(b.start),
+        fim: fmt(b.end),
+        tipo: b.kind,
+        item: b.label,
+      })),
+      naoPlanejadas: freeTasks.map((t) => ({
+        tarefa: t.title,
+        prioridade: t.priority,
+        motivo: 'Sem tempo livre na jornada configurada',
+      })),
+      habitosDoDia: habits.map((h) => h.name),
+      observacao:
+        'Apresente o cronograma de forma clara e pergunte se quer que os blocos de tarefa virem lembretes.',
+    };
+  }
+
+  private tomorrow(): string {
+    const t = new Date();
+    t.setUTCDate(t.getUTCDate() + 1);
+    return t.toISOString().slice(0, 10);
   }
 }
