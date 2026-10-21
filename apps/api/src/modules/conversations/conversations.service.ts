@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -67,23 +68,36 @@ export class ConversationsService {
   /**
    * Persiste a mensagem do usuário, roda o orquestrador e persiste a
    * resposta do assistente com consumo e ações pendentes.
+   * `confirmedActions` executa ferramentas sensíveis previamente
+   * propostas e aprovadas pelo usuário.
    */
   async sendMessage(userId: string, conversationId: string, dto: SendMessageDto) {
+    if (!dto.content?.trim() && !dto.confirmedActions?.length) {
+      throw new BadRequestException(
+        'Envie um conteúdo ou confirme ações pendentes',
+      );
+    }
     const conversation = await this.findAuthorized(userId, conversationId);
 
-    await this.prisma.message.create({
-      data: {
-        conversationId,
-        role: MessageRole.USER,
-        content: dto.content,
-      },
-    });
+    if (dto.content?.trim()) {
+      await this.prisma.message.create({
+        data: {
+          conversationId,
+          role: MessageRole.USER,
+          content: dto.content.trim(),
+        },
+      });
+    }
 
     const result = await this.orchestrator.run({
       userId,
       organizationId: conversation.organizationId,
       agent: conversation.agent,
       conversationId,
+      confirmedToolCalls: dto.confirmedActions?.map((a) => ({
+        name: a.tool,
+        arguments: a.parameters,
+      })),
     });
 
     const assistantMessage = await this.prisma.message.create({
@@ -100,7 +114,7 @@ export class ConversationsService {
       },
     });
 
-    if (!conversation.title) {
+    if (!conversation.title && dto.content) {
       await this.prisma.conversation.update({
         where: { id: conversationId },
         data: { title: dto.content.slice(0, 80) },

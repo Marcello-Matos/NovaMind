@@ -53,11 +53,18 @@ class NovaMindApi {
   }
 
   Future<(ChatMessage, List<PendingAction>)> sendMessage(
-    String conversationId,
-    String content,
-  ) async {
-    final res = await client
-        .post('/conversations/$conversationId/messages', {'content': content});
+    String conversationId, {
+    String? content,
+    List<PendingAction>? confirmedActions,
+  }) async {
+    final res =
+        await client.post('/conversations/$conversationId/messages', {
+      'content': ?content,
+      if (confirmedActions != null)
+        'confirmedActions': confirmedActions
+            .map((a) => {'tool': a.tool, 'parameters': a.parameters})
+            .toList(),
+    });
     final pending = (res['pendingActions'] as List? ?? [])
         .map((p) => PendingAction.fromJson(p))
         .toList();

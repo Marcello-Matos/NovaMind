@@ -104,23 +104,27 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _send() async {
-    final text = _input.text.trim();
-    if (text.isEmpty || _sending) return;
-    _input.clear();
+  Future<void> _submit({String? content, List<PendingAction>? actions}) async {
+    if (_sending) return;
     setState(() {
       _sending = true;
       _error = null;
-      _messages.add(ChatMessage(
-        id: 'tmp',
-        role: 'USER',
-        content: text,
-        createdAt: DateTime.now(),
-      ));
+      if (content != null) {
+        _messages.add(ChatMessage(
+          id: 'tmp',
+          role: 'USER',
+          content: content,
+          createdAt: DateTime.now(),
+        ));
+      }
     });
     try {
       _activeId ??= (await _api.createConversation(organizationId: _org)).id;
-      final res = await _api.sendMessage(_activeId!, text);
+      final res = await _api.sendMessage(
+        _activeId!,
+        content: content,
+        confirmedActions: actions,
+      );
       final messages = await _api.getMessages(_activeId!);
       setState(() {
         _messages = messages;
@@ -132,6 +136,24 @@ class _ChatScreenState extends State<ChatScreen> {
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  Future<void> _send() async {
+    final text = _input.text.trim();
+    if (text.isEmpty) return;
+    _input.clear();
+    await _submit(content: text);
+  }
+
+  Future<void> _confirmAction(PendingAction action) async {
+    setState(() => _pending.remove(action));
+    await _submit(actions: [action]);
+  }
+
+  void _declineAction(PendingAction action) {
+    setState(() => _pending.remove(action));
+    // Avisa o assistente para não propor a mesma ação novamente.
+    _submit(content: 'Não quero executar a ação "${action.tool}".');
   }
 
   @override
@@ -218,12 +240,27 @@ class _ChatScreenState extends State<ChatScreen> {
               if (_pending.isNotEmpty)
                 Container(
                   width: double.infinity,
-                  color: Colors.amber.withValues(alpha: 0.15),
-                  padding: const EdgeInsets.all(10),
-                  child: Text(
-                    '${_pending.length} ação(ões) aguardando confirmação: '
-                    '${_pending.map((p) => p.tool).join(', ')}',
-                    style: const TextStyle(color: Colors.amber),
+                  color: Colors.amber.withValues(alpha: 0.08),
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Ações sensíveis aguardando sua confirmação',
+                        style: TextStyle(
+                          color: Colors.amber,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ..._pending.map(
+                        (a) => _PendingActionCard(
+                          action: a,
+                          onConfirm: () => _confirmAction(a),
+                          onDecline: () => _declineAction(a),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               if (_error != null)
@@ -264,6 +301,66 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _PendingActionCard extends StatelessWidget {
+  final PendingAction action;
+  final VoidCallback onConfirm;
+  final VoidCallback onDecline;
+
+  const _PendingActionCard({
+    required this.action,
+    required this.onConfirm,
+    required this.onDecline,
+  });
+
+  static const _labels = {
+    'create_calendar_event': 'Criar compromisso na agenda',
+    'send_message': 'Enviar mensagem',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _labels[action.tool] ?? action.tool,
+              style: theme.textTheme.titleSmall,
+            ),
+            const SizedBox(height: 6),
+            ...action.parameters.entries.map(
+              (e) => Text(
+                '${e.key}: ${e.value}',
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: onDecline,
+                  child: const Text('Recusar'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  onPressed: onConfirm,
+                  icon: const Icon(Icons.check, size: 16),
+                  label: const Text('Confirmar'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

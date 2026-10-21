@@ -58,9 +58,26 @@ export class OrchestratorService {
       ...history,
     ];
 
-    // Re-executa ferramentas sensíveis já confirmadas pelo usuário
+    // Executa ferramentas sensíveis confirmadas pelo usuário e injeta
+    // os resultados no contexto para o modelo narrar o desfecho.
+    const confirmedResults: Array<{ tool: string; ok: boolean; result: unknown }> = [];
     for (const call of input.confirmedToolCalls ?? []) {
-      await this.tools.execute(call.name, JSON.stringify(call.arguments), ctx, true);
+      const result = await this.tools.execute(
+        call.name,
+        JSON.stringify(call.arguments),
+        ctx,
+        true,
+      );
+      confirmedResults.push({ tool: call.name, ok: result.ok, result: result.result });
+    }
+    if (confirmedResults.length) {
+      messages.push({
+        role: 'user',
+        content:
+          '[Sistema] O usuário confirmou e o backend executou as ações ' +
+          'sensíveis abaixo. Informe o desfecho de forma objetiva.\n' +
+          JSON.stringify(confirmedResults),
+      });
     }
 
     const tools = Object.entries(TOOL_DEFINITIONS)

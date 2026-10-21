@@ -54,7 +54,15 @@
   embeddings (text-embedding-3-small) e busca vetorial via pgvector.
 - BullMQ/Redis: processamento assíncrono, lembretes (`remindAt`), retries.
 - Billing: provider de assinatura + webhooks + limites de franquia por plano.
-- Confirmação de ações sensíveis: endpoint para confirmar e reexecutar
-  `pendingActions` (`confirmedToolCalls` já existe no orquestrador).
 - Admin: papéis de plataforma separados dos papéis de organização.
 - Refresh tokens, rate limiting, testes automatizados na API.
+
+## Confirmação de ações sensíveis (implementado)
+
+- `POST /conversations/:id/messages` aceita `content` (opcional) e/ou
+  `confirmedActions: [{tool, parameters}]` — vazio retorna 400.
+- Orquestrador executa confirmadas com `confirmed=true`, injeta os
+  resultados no contexto e o modelo narra o desfecho.
+- App: `pendingActions` viram cards com Confirmar/Recusar; recusa envia
+  mensagem de texto para o assistente não repropor.
+- Toda execução de ferramenta gera `audit_events` (`tool.<nome>`).
