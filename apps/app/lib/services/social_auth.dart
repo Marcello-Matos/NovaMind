@@ -48,6 +48,8 @@ class SocialAuthService {
     }
   }
 
+  /// Apple usa fluxo nativo no iOS/macOS; na web e no Android precisa do
+  /// Service ID + redirect URI configurados no Apple Developer.
   Future<SocialCredential?> signInWithApple() async {
     try {
       final credential = await SignInWithApple.getAppleIDCredential(
@@ -55,7 +57,7 @@ class SocialAuthService {
           AppleIDAuthorizationScopes.email,
           AppleIDAuthorizationScopes.fullName,
         ],
-        webAuthenticationOptions: kIsWeb && Env.appleServiceId.isNotEmpty
+        webAuthenticationOptions: Env.appleServiceId.isNotEmpty
             ? WebAuthenticationOptions(
                 clientId: Env.appleServiceId,
                 redirectUri: Uri.parse(Env.appleRedirectUri),
