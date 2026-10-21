@@ -23,6 +23,7 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
+  bool _creatingOrg = false;
 
   static const _destinations = [
     (icon: Icons.chat_bubble_outline, label: 'Chat'),
@@ -40,22 +41,156 @@ class _HomeShellState extends State<HomeShell> {
     UsageScreen(),
   ];
 
-  @override
-  Widget build(BuildContext context) {
-    final auth = context.watch<AuthController>();
-    final wide = MediaQuery.of(context).size.width >= 720;
+  static const _createOrgOption = '__create_org__';
 
-    final orgSelector = DropdownButton<String?>(
+  Future<void> _showCreateOrgDialog() async {
+    final controller = TextEditingController();
+    final error = await showDialog<String>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Nova empresa'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Nome da empresa',
+              prefixIcon: Icon(Icons.business_outlined),
+            ),
+            onSubmitted: (_) =>
+                Navigator.pop(context, controller.text.trim()),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (controller.text.trim().isEmpty) return;
+                Navigator.pop(context, controller.text.trim());
+              },
+              child: Text(_creatingOrg ? 'Criando…' : 'Criar'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (error == null || error.isEmpty || !mounted) return;
+    setState(() => _creatingOrg = true);
+    final createError =
+        await context.read<AuthController>().createOrganization(error);
+    if (!mounted) return;
+    setState(() => _creatingOrg = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(createError ??
+            'Empresa criada! Modo empresarial ativado.'),
+      ),
+    );
+  }
+
+  Widget _orgSelector(AuthController auth) {
+    return DropdownButton<String?>(
       value: auth.activeOrgId,
       underline: const SizedBox.shrink(),
       isExpanded: true,
       items: [
-        const DropdownMenuItem(value: null, child: Text('Pessoal')),
+        const DropdownMenuItem(
+          value: null,
+          child: Row(
+            children: [
+              Icon(Icons.person_outline, size: 18),
+              SizedBox(width: 6),
+              Text('Pessoal'),
+            ],
+          ),
+        ),
         ...auth.organizations.map(
-          (o) => DropdownMenuItem(value: o.id, child: Text(o.name)),
+          (o) => DropdownMenuItem(
+            value: o.id,
+            child: Row(
+              children: [
+                const Icon(Icons.business_outlined, size: 18),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    o.name,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const DropdownMenuItem(
+          value: _createOrgOption,
+          child: Row(
+            children: [
+              Icon(Icons.add_business_outlined, size: 18),
+              SizedBox(width: 6),
+              Text('Nova empresa…'),
+            ],
+          ),
         ),
       ],
-      onChanged: auth.setActiveOrg,
+      onChanged: (value) {
+        if (value == _createOrgOption) {
+          _showCreateOrgDialog();
+        } else {
+          auth.setActiveOrg(value);
+        }
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthController>();
+    final wide = MediaQuery.of(context).size.width >= 720;
+    final activeOrg = auth.organizations
+        .where((o) => o.id == auth.activeOrgId)
+        .firstOrNull;
+
+    final orgSelector = _orgSelector(auth);
+
+    // Título reflete o modo ativo: Pessoal (pessoa) vs. empresa (negócio).
+    final titleRow = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          activeOrg == null ? Icons.person_outline : Icons.business_outlined,
+          size: 20,
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            activeOrg?.name ?? 'NovaMind',
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: activeOrg == null
+                ? Theme.of(context).colorScheme.secondaryContainer
+                : Theme.of(context).colorScheme.primaryContainer,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            activeOrg == null ? 'PESSOAL' : 'EMPRESARIAL',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: activeOrg == null
+                      ? Theme.of(context).colorScheme.onSecondaryContainer
+                      : Theme.of(context).colorScheme.onPrimaryContainer,
+                ),
+          ),
+        ),
+      ],
     );
 
     final navDestinations = _destinations
@@ -71,9 +206,9 @@ class _HomeShellState extends State<HomeShell> {
       // Layout compacto (mobile): NavigationBar inferior
       return Scaffold(
         appBar: AppBar(
-          title: const Text('NovaMind'),
+          title: titleRow,
           actions: [
-            SizedBox(width: 130, child: orgSelector),
+            SizedBox(width: 150, child: orgSelector),
             const UserMenuButton(),
           ],
         ),
@@ -102,9 +237,8 @@ class _HomeShellState extends State<HomeShell> {
             leading: Column(
               children: [
                 const SizedBox(height: 8),
-                Text('NovaMind',
-                    style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 16),
+                titleRow,
+                const SizedBox(height: 12),
                 SizedBox(width: 140, child: orgSelector),
                 const SizedBox(height: 8),
               ],

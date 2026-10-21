@@ -119,6 +119,20 @@ class AuthController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Cria uma empresa, recarrega o perfil (para incluir o membership
+  /// OWNER) e ativa o modo empresarial nela.
+  /// Retorna mensagem de erro ou null em caso de sucesso.
+  Future<String?> createOrganization(String name) async {
+    try {
+      final org = await api.createOrganization(name);
+      user = await api.me();
+      await setActiveOrg(org.id);
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    }
+  }
+
   Future<void> _saveSession(String token) async {
     client.token = token;
     final prefs = await SharedPreferences.getInstance();

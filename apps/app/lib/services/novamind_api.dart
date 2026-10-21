@@ -62,6 +62,20 @@ class NovaMindApi {
           .map((o) => Organization.fromJson(o))
           .toList();
 
+  /// Cria uma empresa (usuário vira OWNER) com slug gerado do nome.
+  Future<Organization> createOrganization(String name) async {
+    final base = name
+        .toLowerCase()
+        .trim()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+    final slug =
+        '${base.isEmpty ? 'empresa' : base}-${DateTime.now().millisecondsSinceEpoch % 100000}';
+    return Organization.fromJson(
+      await client.post('/organizations', {'name': name, 'slug': slug}),
+    );
+  }
+
   // ===== conversations =====
   Future<List<Conversation>> listConversations({String? organizationId}) async =>
       (await client.get('/conversations',
