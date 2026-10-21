@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -18,6 +19,7 @@ import { CalendarModule } from './modules/calendar/calendar.module';
 import { HabitsModule } from './modules/habits/habits.module';
 import { NotesModule } from './modules/notes/notes.module';
 import { RemindersModule } from './modules/reminders/reminders.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
 
 @Module({
   imports: [
@@ -25,6 +27,7 @@ import { RemindersModule } from './modules/reminders/reminders.module';
       isGlobal: true,
       envFilePath: ['../../.env', '.env'],
     }),
+    ScheduleModule.forRoot(),
     PrismaModule,
     HealthModule,
     AuthModule,
@@ -43,6 +46,7 @@ import { RemindersModule } from './modules/reminders/reminders.module';
     HabitsModule,
     NotesModule,
     RemindersModule,
+    IntegrationsModule,
   ],
 })
 export class AppModule {}

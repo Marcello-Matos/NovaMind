@@ -1,3 +1,4 @@
+import '../config/env.dart';
 import '../models/models.dart';
 import 'api_client.dart';
 
@@ -148,6 +149,25 @@ class NovaMindApi {
   Future<List<ReminderItem>> dueReminders() async {
     final res = await client.get('/reminders/due');
     return (res as List).map((e) => ReminderItem.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  // ===== integração Google Calendar =====
+
+  /// `{connected: bool, googleEmail?, lastSyncAt?}`.
+  Future<Map<String, dynamic>> googleStatus() async =>
+      (await client.get('/integrations/google/status')) as Map<String, dynamic>;
+
+  /// Sincronização bidirecional (importa do Google e envia eventos locais).
+  Future<Map<String, dynamic>> googleSync() async =>
+      (await client.post('/integrations/google/sync', {})) as Map<String, dynamic>;
+
+  Future<void> googleDisconnect() => client.delete('/integrations/google');
+
+  /// URL do consentimento OAuth aberta no navegador do sistema.
+  String get googleAuthorizeUrl {
+    final token = client.token ?? '';
+    return '${Env.apiUrl}/v1/integrations/google/authorize'
+        '?token=${Uri.encodeComponent(token)}';
   }
 
   // ===== login social =====

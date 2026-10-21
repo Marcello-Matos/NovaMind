@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/models.dart';
 import '../../services/api_client.dart';
@@ -24,6 +25,10 @@ class _AgendaScreenState extends State<AgendaScreen> {
   List<ReminderItem> _reminders = [];
   bool _loading = true;
   String? _error;
+  bool _googleConnected = false;
+  String? _googleEmail;
+  DateTime? _googleLastSync;
+  bool _googleSyncing = false;
 
   @override
   void initState() {
@@ -63,6 +68,92 @@ class _AgendaScreenState extends State<AgendaScreen> {
         _loading = false;
       });
     }
+    await _loadGoogleStatus();
+  }
+
+  Future<void> _loadGoogleStatus() async {
+    try {
+      final status = await api.googleStatus();
+      if (!mounted) return;
+      setState(() {
+        _googleConnected = status['connected'] == true;
+        _googleEmail = status['googleEmail'] as String?;
+        _googleLastSync = status['lastSyncAt'] != null
+            ? DateTime.parse(status['lastSyncAt'] as String)
+            : null;
+      });
+    } on ApiException {
+      // Integração indisponível: card fica oculto/sem status.
+    }
+  }
+
+  Future<void> _connectGoogle() async {
+    final url = Uri.parse(api.googleAuthorizeUrl);
+    try {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Não foi possível abrir o navegador.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _syncGoogle() async {
+    setState(() => _googleSyncing = true);
+    try {
+      final res = await api.googleSync();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(
+          'Sincronizado: ${res['imported'] ?? 0} importados, '
+          '${res['pushed'] ?? 0} enviados ao Google',
+        ),
+      ));
+      await _load();
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _googleSyncing = false);
+    }
+  }
+
+  Future<void> _disconnectGoogle() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Desconectar Google Calendar'),
+        content: const Text(
+          'Os compromissos já importados continuam no NovaMind, '
+          'mas não haverá mais sincronização.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Desconectar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await api.googleDisconnect();
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
+      }
+      return;
+    }
+    await _loadGoogleStatus();
   }
 
   Future<void> _newEvent() async {
@@ -188,6 +279,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                         titleCentered: true,
                       ),
                     ),
+                    _googleCard(theme),
                     const Padding(
                       padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
                       child: Text(
@@ -268,6 +360,82 @@ class _AgendaScreenState extends State<AgendaScreen> {
                       ),
                   ],
                 ),
+    );
+  }
+
+  Widget _googleCard(ThemeData theme) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  _googleConnected ? Icons.event_available : Icons.event_busy,
+                  color: _googleConnected
+                      ? theme.colorScheme.primary
+                      : theme.disabledColor,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Google Calendar',
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _googleConnected
+                  ? 'Conectado'
+                  : 'Sincronize seus compromissos nos dois sentidos.',
+              style: theme.textTheme.bodySmall,
+            ),
+            if (_googleConnected && _googleEmail != null)
+              Text(_googleEmail!, style: theme.textTheme.bodySmall),
+            if (_googleConnected && _googleLastSync != null)
+              Text(
+                'Última sync: ${_googleLastSync!.toLocal().day}/${_googleLastSync!.toLocal().month} '
+                'às ${_fmtTime(_googleLastSync!.toLocal())}',
+                style: theme.textTheme.bodySmall,
+              ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                if (!_googleConnected)
+                  FilledButton.icon(
+                    onPressed: _connectGoogle,
+                    icon: const Icon(Icons.link, size: 18),
+                    label: const Text('Conectar'),
+                  )
+                else ...[
+                  FilledButton.icon(
+                    onPressed: _googleSyncing ? null : _syncGoogle,
+                    icon: _googleSyncing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.sync, size: 18),
+                    label: const Text('Sincronizar agora'),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: _disconnectGoogle,
+                    child: const Text('Desconectar'),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
