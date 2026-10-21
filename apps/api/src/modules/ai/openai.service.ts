@@ -10,11 +10,14 @@ import type {
   ChatCompletionTool,
 } from 'openai/resources/chat/completions';
 
-// USD por 1M tokens — referência: https://developers.openai.com/api/docs/pricing
-// Revalidar antes do lançamento.
+// USD por 1M tokens — revalidar antes do lançamento.
+// OpenAI: https://developers.openai.com/api/docs/pricing
+// Gemini: https://ai.google.dev/pricing
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'gpt-4o-mini': { input: 0.15, output: 0.6 },
   'gpt-4o': { input: 2.5, output: 10.0 },
+  'gemini-2.0-flash': { input: 0.1, output: 0.4 },
+  'gemini-2.5-flash': { input: 0.3, output: 2.5 },
 };
 
 @Injectable()
@@ -25,7 +28,13 @@ export class OpenAiService {
   constructor(private readonly config: ConfigService) {
     const apiKey = config.get<string>('OPENAI_API_KEY');
     if (apiKey) {
-      this.client = new OpenAI({ apiKey });
+      // Compatível com provedores alternativos que expõem a API da OpenAI:
+      // Gemini (https://generativelanguage.googleapis.com/v1beta/openai),
+      // Groq, OpenRouter etc. Basta definir OPENAI_BASE_URL + OPENAI_CHAT_MODEL.
+      this.client = new OpenAI({
+        apiKey,
+        baseURL: config.get<string>('OPENAI_BASE_URL') || undefined,
+      });
     }
     this.chatModel = config.get<string>('OPENAI_CHAT_MODEL', 'gpt-4o-mini');
   }
@@ -61,8 +70,8 @@ export class OpenAiService {
         }
         if (err.status === 429) {
           throw new ServiceUnavailableException(
-            'OpenAI sem créditos ou limite de requisições — verifique ' +
-              'o billing em platform.openai.com',
+            'Provedor de IA sem créditos ou no limite de requisições — ' +
+              'verifique o billing/quota da chave configurada',
           );
         }
         throw new BadGatewayException(
