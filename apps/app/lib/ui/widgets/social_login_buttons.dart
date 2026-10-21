@@ -22,6 +22,15 @@ class SocialLoginButtons extends StatefulWidget {
 
 class _SocialLoginButtonsState extends State<SocialLoginButtons> {
   final _social = SocialAuthService();
+
+  /// O entitlement "Sign in with Apple" exige conta paga da Apple
+  /// (Personal Team não suporta). O botão só entra no build quando o
+  /// entitlement é restaurado: --dart-define=APPLE_SIGNIN_ENABLED=true
+  static const _appleEnabled = bool.fromEnvironment(
+    'APPLE_SIGNIN_ENABLED',
+    defaultValue: false,
+  );
+
   bool _appleSupported = false;
   bool _busy = false;
   String? _error;
@@ -31,8 +40,9 @@ class _SocialLoginButtonsState extends State<SocialLoginButtons> {
     super.initState();
     _social.appleSupported.then((supported) {
       if (mounted) {
-        setState(() => _appleSupported =
-            supported && (!kIsWeb || Env.appleServiceId.isNotEmpty));
+        setState(() => _appleSupported = _appleEnabled &&
+            supported &&
+            (!kIsWeb || Env.appleServiceId.isNotEmpty));
       }
     });
   }

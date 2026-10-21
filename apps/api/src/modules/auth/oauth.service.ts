@@ -12,6 +12,15 @@ interface SocialIdentity {
 }
 
 /**
+ * Client ID iOS do app — espelhado no Info.plist (GIDClientID / URL scheme).
+ * Client IDs são identificadores públicos; o SDK iOS emite tokens com este
+ * audience, então ele sempre participa da validação, além dos IDs vindos
+ * da env GOOGLE_CLIENT_IDS (web/Android).
+ */
+const IOS_GOOGLE_CLIENT_ID =
+  '1029334450863-ncac0fhj1boi36nn2gi9jbr8jvr78ef2.apps.googleusercontent.com';
+
+/**
  * Login social: valida o identity token emitido pelo provedor no app,
  * encontra/cria o usuário e devolve a identidade para o AuthService
  * assinar o JWT da plataforma.
@@ -35,6 +44,9 @@ export class OauthService {
       throw new UnauthorizedException(
         'Login Google não configurado (GOOGLE_CLIENT_IDS)',
       );
+    }
+    if (!audiences.includes(IOS_GOOGLE_CLIENT_ID)) {
+      audiences.push(IOS_GOOGLE_CLIENT_ID);
     }
     try {
       const ticket = await this.googleClient.verifyIdToken({
