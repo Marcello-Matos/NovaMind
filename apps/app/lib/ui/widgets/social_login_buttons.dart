@@ -6,6 +6,7 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import '../../config/env.dart';
 import '../../services/social_auth.dart';
 import '../../state/auth_controller.dart';
+import 'google_brand_button.dart';
 import 'google_sign_in_button.dart';
 
 /// Botões "Continuar com Google" / "Continuar com Apple".
@@ -108,11 +109,7 @@ class _SocialLoginButtonsState extends State<SocialLoginButtons> {
             onError: (e) => setState(() => _error = e),
           )
         else
-          OutlinedButton.icon(
-            onPressed: _busy ? null : _google,
-            icon: const Icon(Icons.g_mobiledata, size: 28),
-            label: const Text('Continuar com Google'),
-          ),
+          GoogleBrandButton(onPressed: _busy ? null : _google),
         if (_appleSupported) ...[
           const SizedBox(height: 10),
           SizedBox(
