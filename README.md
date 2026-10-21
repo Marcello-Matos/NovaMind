@@ -8,7 +8,7 @@ organização. Baseado no plano de produto/arquitetura (`Plano_Projeto_NovaMind.
 
 | Camada | Tecnologia |
 |---|---|
-| Frontend | Next.js 15 + React 19 + Tailwind CSS 4 (`apps/web`) |
+| App | Flutter (web + iOS + Android, mesmo código) (`apps/app`) |
 | Backend | NestJS 10 modular monolith (`apps/api`) |
 | Banco | PostgreSQL 16 + pgvector |
 | Fila/cache | Redis + BullMQ *(previsto, ainda não conectado)* |
@@ -24,8 +24,9 @@ apps/
     src/modules/  auth, users, organizations, conversations, ai
                   (orchestrator + tools), memory, tasks, leads,
                   knowledge-base, usage, audit, admin, health
-  web/            Next.js App Router — login/registro + área logada
+  app/            Flutter — login/registro + área logada
                   (chat, tarefas, memória, documentos, uso)
+                  web, iOS e Android no mesmo codebase
 docker-compose.yml  postgres+pgvector, redis, minio
 ```
 
@@ -52,12 +53,15 @@ npm run db:migrate --workspace @novamind/api   # aplica migrations
 npm run db:generate --workspace @novamind/api  # regera o client
 ```
 
-### 4. Subir API e Web
+### 4. Subir API e App
 
 ```bash
 npm run dev:api   # http://localhost:3001/v1  (health: /v1/health)
-npm run dev:web   # http://localhost:3000
+npm run dev:app   # Flutter web-server em http://localhost:3000
+# ou: cd apps/app && flutter run -d ios | android | chrome
 ```
+
+A URL da API no app é configurável: `flutter run --dart-define=API_URL=http://localhost:3001`.
 
 ## Endpoints principais (`/v1`)
 

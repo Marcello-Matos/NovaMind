@@ -7,12 +7,12 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspaces --if-present",
     "dev:api": "npm run dev --workspace @novamind/api",
-    "dev:web": "npm run dev --workspace @novamind/web",
-    "build": "npm run build --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "dev:app": "cd apps/app && flutter run -d web-server --web-port=3000",
+    "build": "npm run build --workspace @novamind/api && cd apps/app && flutter build web",
+    "typecheck": "npm run typecheck --workspace @novamind/api && cd apps/app && flutter analyze",
     "lint": "npm run lint --workspaces --if-present",
+    "test": "cd apps/app && flutter test",
     "db:generate": "npm run db:generate --workspace @novamind/api",
     "db:migrate": "npm run db:migrate --workspace @novamind/api",
     "db:push": "npm run db:push --workspace @novamind/api",

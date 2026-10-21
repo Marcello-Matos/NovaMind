@@ -2,23 +2,30 @@
 
 ## Comandos
 
-- Instalar deps: `npm install` (raiz; workspaces `apps/*`)
-- Typecheck: `npm run typecheck` (raiz) ou por workspace
-- Build: `npm run build` (raiz)
+- Instalar deps: `npm install` (raiz; workspace `apps/api`) e
+  `flutter pub get` em `apps/app`
+- Typecheck/análise: `npm run typecheck` (raiz) — tsc na API + flutter analyze
+- Build: `npm run build` — nest build + `flutter build web`
+- Testes: `flutter test` em `apps/app` (ou `npm test` na raiz)
 - Dev API: `npm run dev:api` (porta 3001, prefixo `/v1`)
-- Dev Web: `npm run dev:web` (porta 3000)
+- Dev App: `npm run dev:app` (Flutter web-server, porta 3000) ou
+  `cd apps/app && flutter run -d ios|android|chrome`
 - Prisma: rodar a partir de `apps/api` — `npx prisma migrate dev`, `npx prisma generate`
 - Infra: `docker compose up -d` (postgres/pgvector, redis, minio)
 
 ## Decisões e convenções
 
-- Monorepo npm workspaces; packages nomeados `@novamind/api` e `@novamind/web`.
+- Monorepo: `apps/api` (NestJS) + `apps/app` (Flutter). O Flutter **não**
+  é workspace npm; os scripts da raiz chamam `cd apps/app && flutter ...`.
 - Env único na raiz (`.env`); `apps/api/.env` é symlink para `../../.env`
   (necessário para o Prisma CLI). ConfigModule lê `../../.env` antes de `.env`.
-- API versionada com prefixo global `/v1`. CORS liberado para `WEB_ORIGIN`
-  (default `http://localhost:3000`).
-- Auth: JWT bearer (localStorage no front). Guard custom `JwtAuthGuard`
-  (sem passport) + decorator `@CurrentUser()`.
+- API versionada com prefixo global `/v1`. CORS: `WEB_ORIGIN` em produção;
+  em dev aceita qualquer porta `localhost` (Flutter web usa porta dinâmica).
+- URL da API no app: `--dart-define=API_URL=...` (default
+  `http://localhost:3001`, ver `apps/app/lib/config/env.dart`).
+- Auth: JWT bearer. API guarda custom `JwtAuthGuard` + `@CurrentUser()`.
+  No app, token e organização ativa persistem em `shared_preferences`
+  (`state/auth_controller.dart`, Provider + ChangeNotifier).
 - Isolamento multi-tenant: `organizationId` null = ambiente pessoal;
   qualquer consulta empresarial passa por
   `OrganizationsService.assertMembership(userId, orgId, roles?)`.
@@ -33,9 +40,11 @@
 - Ferramentas em `ai/tools/tool-definitions.ts`; executor em
   `tool-executor.service.ts`. Ferramenta `sensitive: true` retorna
   `pendingConfirmation` — nunca executa sem `confirmed: true` do usuário.
-- UI em pt-BR, dark theme, Tailwind v4 (`@tailwindcss/postcss`).
-  Estado de auth no front: `src/lib/auth-context.tsx`; HTTP client:
-  `src/lib/api.ts`.
+- App Flutter: pt-BR, Material 3 dark, NavigationRail (web/desktop) e
+  NavigationBar (mobile) — mesmas telas do plano: chat, tarefas, memória
+  controlável, documentos e uso/plano.
+- file_picker 13.x: API nova — `FilePicker.pickFile()` retorna
+  `PlatformFile?`; ler bytes com `file.readAsBytes()`.
 - Sem OPENAI_API_KEY: `OpenAiService` lança 503 explícito no chat;
   demais endpoints funcionam.
 
@@ -48,4 +57,4 @@
 - Confirmação de ações sensíveis: endpoint para confirmar e reexecutar
   `pendingActions` (`confirmedToolCalls` já existe no orquestrador).
 - Admin: papéis de plataforma separados dos papéis de organização.
-- Refresh tokens / cookies httpOnly, rate limiting, testes automatizados.
+- Refresh tokens, rate limiting, testes automatizados na API.

@@ -6,8 +6,10 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.setGlobalPrefix('v1');
+  const webOrigin = process.env.WEB_ORIGIN;
   app.enableCors({
-    origin: process.env.WEB_ORIGIN ?? 'http://localhost:3000',
+    // Em dev, aceita qualquer porta localhost (Flutter web usa porta dinâmica).
+    origin: webOrigin ?? /^https?:\/\/localhost(:\d+)?$/,
     credentials: true,
   });
   app.useGlobalPipes(
