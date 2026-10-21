@@ -47,6 +47,19 @@
   `PlatformFile?`; ler bytes com `file.readAsBytes()`.
 - Sem OPENAI_API_KEY: `OpenAiService` lança 503 explícito no chat;
   demais endpoints funcionam.
+- Login social: `POST /auth/google` e `POST /auth/apple` validam o
+  identity token no backend (`oauth.service.ts`) e vinculam por
+  `oauth_accounts` (provider + sub). `passwordHash` é nullable.
+  Audiences: `GOOGLE_CLIENT_IDS` / `APPLE_CLIENT_IDS` (vírgula-separadas).
+  App: `google_sign_in` 7.x — na web `authenticate()` não existe, usa-se
+  `renderButton` via `GoogleSignInPlugin` (ver `social_auth.dart`).
+  Apple na web exige Service ID + redirect (`APPLE_SERVICE_ID`/
+  `APPLE_REDIRECT_URI` dart-defines); `Runner.entitlements` já tem a
+  capability.
+- Deploy: `render.yaml` (API `rootDir: apps/api` + static site
+  `rootDir: apps/app`, Flutter SDK clonado no build). Banco: Neon com
+  `CREATE EXTENSION vector` + `prisma migrate deploy`. Passo a passo em
+  `docs/DEPLOY.md`. API lê `PORT` (Render) antes de `API_PORT`.
 
 ## Pendências conhecidas (próximas fases do plano)
 

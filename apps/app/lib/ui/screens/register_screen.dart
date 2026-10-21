@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../state/auth_controller.dart';
+import '../widgets/social_login_buttons.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -90,6 +91,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     onPressed: _loading ? null : _submit,
                     child: Text(_loading ? 'Criando…' : 'Criar conta'),
                   ),
+                  const SizedBox(height: 8),
+                  const SocialLoginButtons(),
                 ],
               ),
             ),

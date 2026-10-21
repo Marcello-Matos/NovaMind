@@ -26,6 +26,20 @@ class NovaMindApi {
 
   Future<User> me() async => User.fromJson(await client.get('/auth/me'));
 
+  // ===== login social =====
+  Future<(String, User)> loginWithGoogle(String idToken) async {
+    final res = await client.post('/auth/google', {'idToken': idToken});
+    return (res['accessToken'] as String, User.fromJson(res['user']));
+  }
+
+  Future<(String, User)> loginWithApple(String identityToken, {String? name}) async {
+    final res = await client.post('/auth/apple', {
+      'identityToken': identityToken,
+      'name': ?name,
+    });
+    return (res['accessToken'] as String, User.fromJson(res['user']));
+  }
+
   // ===== organizations =====
   Future<List<Organization>> listOrganizations() async =>
       (await client.get('/organizations') as List)

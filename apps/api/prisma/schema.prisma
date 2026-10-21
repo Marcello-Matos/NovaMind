@@ -78,7 +78,7 @@ model User {
   id           String   @id @default(uuid())
   email        String   @unique
   name         String
-  passwordHash String   @map("password_hash")
+  passwordHash String?  @map("password_hash") // null em contas criadas via OAuth
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
@@ -89,8 +89,24 @@ model User {
   usageEvents    UsageEvent[]
   auditEvents    AuditEvent[]       @relation("AuditActor")
   documents      KnowledgeDocument[] @relation("DocumentUploader")
+  oauthAccounts  OauthAccount[]
 
   @@map("users")
+}
+
+model OauthAccount {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  provider       String   // google | apple
+  providerUserId String   @map("provider_user_id") // "sub" do identity token
+  email          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
+  @@map("oauth_accounts")
 }
 
 model Organization {

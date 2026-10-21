@@ -1,0 +1,53 @@
+# Blueprint Render — cria a API (web service) e o app Flutter web (static site).
+# No dashboard: New → Blueprint → apontar este repositório.
+# Variáveis marcadas sync:false devem ser preenchidas manualmente.
+#
+# IMPORTANTE (plano free): web services dormem após ~15 min sem tráfego —
+# o primeiro acesso pode levar ~30-60s para acordar. Para uso contínuo,
+# mude plan: starter (~US$7/mês).
+
+services:
+  # ===== API NestJS =====
+  - type: web
+    name: novamind-api
+    runtime: node
+    plan: free
+    rootDir: apps/api
+    buildCommand: npm install && npx prisma generate && npx prisma migrate deploy && npm run build
+    startCommand: node dist/main.js
+    healthCheckPath: /v1/health
+    envVars:
+      # DATABASE_URL do Neon (Settings → Connection string).
+      # O Neon suporta pgvector — rode `CREATE EXTENSION vector` uma vez no SQL editor.
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_IDS
+        sync: false
+      - key: APPLE_CLIENT_IDS
+        sync: false
+      # Domínio do static site abaixo — o CORS aceita só essa origem em prod.
+      - key: WEB_ORIGIN
+        value: https://novamind-app.onrender.com
+
+  # ===== App Flutter Web (site estático) =====
+  - type: web
+    name: novamind-app
+    runtime: static
+    plan: free
+    rootDir: apps/app
+    buildCommand: >-
+      git clone --depth 1 -b stable https://github.com/flutter/flutter.git "$HOME/flutter-sdk" &&
+      export PATH="$HOME/flutter-sdk/bin:$PATH" &&
+      flutter pub get &&
+      flutter build web --release
+        --dart-define=API_URL=https://novamind-api.onrender.com
+        --dart-define=GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
+    staticPublishPath: build/web
+    pullRequestPreviewsEnabled: false
+    envVars:
+      - key: GOOGLE_CLIENT_ID
+        sync: false

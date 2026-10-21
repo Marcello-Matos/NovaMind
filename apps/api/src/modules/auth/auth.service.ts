@@ -40,7 +40,11 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },
     });
-    if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
+    // Contas criadas via OAuth não têm senha — caem no mesmo 401 genérico.
+    if (
+      !user?.passwordHash ||
+      !(await bcrypt.compare(dto.password, user.passwordHash))
+    ) {
       throw new UnauthorizedException('Credenciais inválidas');
     }
     return this.buildAuthResponse(user.id, user.email, user.name);
@@ -63,6 +67,11 @@ export class AuthService {
       },
     });
     return user;
+  }
+
+  /** Emite o JWT da plataforma para um usuário já autenticado (ex.: OAuth). */
+  async loginResponseFor(userId: string, email: string, name: string) {
+    return this.buildAuthResponse(userId, email, name);
   }
 
   private async buildAuthResponse(userId: string, email: string, name: string) {

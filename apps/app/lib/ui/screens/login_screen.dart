@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../state/auth_controller.dart';
+import '../widgets/social_login_buttons.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -89,6 +90,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     child: const Text('Não tem conta? Cadastre-se'),
                   ),
+                  const SizedBox(height: 8),
+                  const SocialLoginButtons(),
                 ],
               ),
             ),

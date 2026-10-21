@@ -62,6 +62,30 @@ class AuthController extends ChangeNotifier {
     }
   }
 
+  Future<String?> loginWithGoogle(String idToken) async {
+    try {
+      final (token, u) = await api.loginWithGoogle(idToken);
+      await _saveSession(token);
+      user = u;
+      notifyListeners();
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    }
+  }
+
+  Future<String?> loginWithApple(String identityToken, {String? name}) async {
+    try {
+      final (token, u) = await api.loginWithApple(identityToken, name: name);
+      await _saveSession(token);
+      user = u;
+      notifyListeners();
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    }
+  }
+
   Future<void> logout() async {
     await _clearSession();
     user = null;

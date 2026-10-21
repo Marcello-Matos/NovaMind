@@ -165,13 +165,25 @@ Verificação: `npm run typecheck` (tsc + flutter analyze) · `flutter test` ·
 
 | Recurso | Rotas |
 |---|---|
-| Auth | `POST /auth/register` `POST /auth/login` `GET /auth/me` |
+| Auth | `POST /auth/register` `POST /auth/login` `GET /auth/me` `POST /auth/google` `POST /auth/apple` |
 | Organizações | `GET/POST /organizations` `GET /organizations/:id` |
 | Conversas | `GET/POST /conversations` `GET /conversations/:id` `POST /conversations/:id/messages` |
 | Mensagens | `content` e/ou `confirmedActions: [{tool, parameters}]` |
 | Tarefas / Memória / Leads | CRUD completo por escopo |
 | Conhecimento | `GET/POST/DELETE /knowledge-base/documents` |
 | Uso / Admin | `GET /usage/summary` `GET /admin/overview` `GET /health` |
+
+## Login social e deploy
+
+O app tem botões **Continuar com Google** e **Continuar com Apple**:
+o backend valida o identity token de cada provedor (`google-auth-library`
+e `apple-signin-auth`), cria/vincula a conta em `oauth_accounts` e emite o
+JWT da plataforma. Na web, o Google usa o botão oficial do SDK; a Apple só
+aparece quando configurada.
+
+Deploy: blueprint `render.yaml` (API + app web no Render) + banco no Neon.
+**Guia completo de configuração: [`docs/DEPLOY.md`](docs/DEPLOY.md)** —
+inclui Neon/pgvector, Google Cloud Console e Apple Developer.
 
 ## Segurança e privacidade (por padrão)
 
