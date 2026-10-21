@@ -89,6 +89,9 @@ class NovaMindApi {
         'agent': ?agent,
       }));
 
+  Future<void> deleteConversation(String conversationId) =>
+      client.delete('/conversations/$conversationId');
+
   Future<List<ChatMessage>> getMessages(String conversationId) async {
     final res = await client.get('/conversations/$conversationId');
     return (res['messages'] as List)

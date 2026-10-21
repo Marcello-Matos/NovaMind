@@ -21,7 +21,6 @@ class _ChatScreenState extends State<ChatScreen> {
   String? _activeId;
   bool _sending = false;
   String? _error;
-  bool _listExpanded = false;
 
   @override
   void initState() {
@@ -157,8 +156,47 @@ class _ChatScreenState extends State<ChatScreen> {
     _submit(content: 'Não quero executar a ação "${action.tool}".');
   }
 
-  /// Lista de conversas — usada como sidebar em telas largas e como
-  /// painel expansível no topo em telas estreitas.
+  Future<void> _delete(Conversation c) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Excluir conversa'),
+        content: Text(
+          'Excluir "${c.title ?? 'Sem título'}"? Essa ação não pode ser desfeita.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await _api.deleteConversation(c.id);
+      setState(() {
+        _conversations.removeWhere((x) => x.id == c.id);
+        if (_activeId == c.id) {
+          _activeId = null;
+          _messages = [];
+          _pending = [];
+        }
+      });
+    } on ApiException catch (e) {
+      setState(() => _error = e.message);
+    }
+  }
+
+  /// Lista de conversas — usada como drawer no mobile e sidebar nas
+  /// telas largas, com exclusão estilo ChatGPT.
   Widget _conversationList({VoidCallback? onPick}) {
     return Column(
       children: [
@@ -174,25 +212,37 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ),
         Expanded(
-          child: ListView.builder(
-            itemCount: _conversations.length,
-            itemBuilder: (_, i) {
-              final c = _conversations[i];
-              return ListTile(
-                dense: true,
-                selected: c.id == _activeId,
-                title: Text(
-                  c.title ?? 'Sem título',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+          child: _conversations.isEmpty
+              ? Center(
+                  child: Text(
+                    'Nenhuma conversa ainda',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: _conversations.length,
+                  itemBuilder: (_, i) {
+                    final c = _conversations[i];
+                    return ListTile(
+                      dense: true,
+                      selected: c.id == _activeId,
+                      title: Text(
+                        c.title ?? 'Sem título',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        tooltip: 'Excluir conversa',
+                        onPressed: () => _delete(c),
+                      ),
+                      onTap: () {
+                        onPick?.call();
+                        _open(c);
+                      },
+                    );
+                  },
                 ),
-                onTap: () {
-                  onPick?.call();
-                  _open(c);
-                },
-              );
-            },
-          ),
         ),
       ],
     );
@@ -202,54 +252,73 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final narrow = MediaQuery.of(context).size.width < 640;
+
+    // Mobile: drawer lateral estilo ChatGPT (menu hambúrguer abre o
+    // histórico completo) + botão de nova conversa na barra do chat.
+    if (narrow) {
+      return Scaffold(
+        drawer: Drawer(
+          width: 300,
+          child: SafeArea(
+            child: _conversationList(
+              onPick: () => Navigator.of(context).pop(),
+            ),
+          ),
+        ),
+        body: Column(
+          children: [
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Row(
+                children: [
+                  Builder(
+                    builder: (drawerContext) => IconButton(
+                      tooltip: 'Histórico de conversas',
+                      icon: const Icon(Icons.menu),
+                      onPressed: () =>
+                          Scaffold.of(drawerContext).openDrawer(),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      'NovaMind',
+                      style: theme.textTheme.titleSmall,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Nova conversa',
+                    icon: const Icon(Icons.add_comment_outlined),
+                    onPressed: _newConversation,
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(child: _chatBody(theme)),
+          ],
+        ),
+      );
+    }
+
     return Row(
       children: [
-        if (!narrow)
-          SizedBox(
-            width: 240,
-            child: _conversationList(),
-          ),
-        if (!narrow) const VerticalDivider(width: 1),
+        SizedBox(
+          width: 240,
+          child: _conversationList(),
+        ),
+        const VerticalDivider(width: 1),
+        Expanded(child: _chatBody(theme)),
+      ],
+    );
+  }
+
+  Widget _chatBody(ThemeData theme) {
+    return Column(
+      children: [
         Expanded(
-          child: Column(
-            children: [
-              // Divisão horizontal em telas pequenas: lista de conversas
-              // expansível no topo, chat ocupando o resto da tela.
-              if (narrow) ...[
-                InkWell(
-                  onTap: () =>
-                      setState(() => _listExpanded = !_listExpanded),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.forum_outlined, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Conversas (${_conversations.length})',
-                            style: theme.textTheme.titleSmall,
-                          ),
-                        ),
-                        Icon(_listExpanded
-                            ? Icons.expand_less
-                            : Icons.expand_more),
-                      ],
-                    ),
-                  ),
-                ),
-                if (_listExpanded)
-                  SizedBox(
-                    height: 220,
-                    child: _conversationList(
-                      onPick: () => setState(() => _listExpanded = false),
-                    ),
-                  ),
-                const Divider(height: 1),
-              ],
-              Expanded(
-                child: _messages.isEmpty
+          child: _messages.isEmpty
                     ? Center(
                         child: Text(
                           'Como posso ajudar?\nConverse, crie tarefas ou resuma documentos.',
@@ -284,68 +353,65 @@ class _ChatScreenState extends State<ChatScreen> {
                           );
                         },
                       ),
-              ),
-              if (_sending)
-                const LinearProgressIndicator(minHeight: 2),
-              if (_pending.isNotEmpty)
-                Container(
-                  width: double.infinity,
-                  color: Colors.amber.withValues(alpha: 0.08),
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Ações sensíveis aguardando sua confirmação',
-                        style: TextStyle(
-                          color: Colors.amber,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      ..._pending.map(
-                        (a) => _PendingActionCard(
-                          action: a,
-                          onConfirm: () => _confirmAction(a),
-                          onDecline: () => _declineAction(a),
-                        ),
-                      ),
-                    ],
+        ),
+        if (_sending)
+          const LinearProgressIndicator(minHeight: 2),
+        if (_pending.isNotEmpty)
+          Container(
+            width: double.infinity,
+            color: Colors.amber.withValues(alpha: 0.08),
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Ações sensíveis aguardando sua confirmação',
+                  style: TextStyle(
+                    color: Colors.amber,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-              if (_error != null)
-                Container(
-                  width: double.infinity,
-                  color: theme.colorScheme.errorContainer,
-                  padding: const EdgeInsets.all(10),
-                  child: Text(_error!,
-                      style:
-                          TextStyle(color: theme.colorScheme.onErrorContainer)),
+                const SizedBox(height: 8),
+                ..._pending.map(
+                  (a) => _PendingActionCard(
+                    action: a,
+                    onConfirm: () => _confirmAction(a),
+                    onDecline: () => _declineAction(a),
+                  ),
                 ),
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _input,
-                        decoration: InputDecoration(
-                          hintText: _org == null
-                              ? 'Mensagem para o assistente pessoal…'
-                              : 'Pergunte sobre a empresa, leads ou documentos…',
-                          border: const OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                        onSubmitted: (_) => _send(),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                      onPressed: _sending ? null : _send,
-                      child: const Text('Enviar'),
-                    ),
-                  ],
+              ],
+            ),
+          ),
+        if (_error != null)
+          Container(
+            width: double.infinity,
+            color: theme.colorScheme.errorContainer,
+            padding: const EdgeInsets.all(10),
+            child: Text(_error!,
+                style:
+                    TextStyle(color: theme.colorScheme.onErrorContainer)),
+          ),
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _input,
+                  decoration: InputDecoration(
+                    hintText: _org == null
+                        ? 'Mensagem para o assistente pessoal…'
+                        : 'Pergunte sobre a empresa, leads ou documentos…',
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onSubmitted: (_) => _send(),
                 ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: _sending ? null : _send,
+                child: const Text('Enviar'),
               ),
             ],
           ),
