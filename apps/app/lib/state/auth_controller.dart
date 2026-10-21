@@ -86,6 +86,21 @@ class AuthController extends ChangeNotifier {
     }
   }
 
+  /// Salva a foto de perfil (data URL processado) ou remove com [removeAvatar].
+  /// Retorna mensagem de erro ou null em caso de sucesso.
+  Future<String?> updateAvatar(String? dataUrl, {bool remove = false}) async {
+    try {
+      user = await api.updateMe(
+        avatarDataUrl: dataUrl,
+        removeAvatar: remove,
+      );
+      notifyListeners();
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    }
+  }
+
   Future<void> logout() async {
     await _clearSession();
     user = null;

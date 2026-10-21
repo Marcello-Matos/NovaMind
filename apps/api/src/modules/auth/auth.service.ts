@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   UnauthorizedException,
@@ -8,6 +9,10 @@ import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { UpdateMeDto } from './dto/update-me.dto';
+
+const AVATAR_DATA_URL_PATTERN =
+  /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 
 @Injectable()
 export class AuthService {
@@ -73,6 +78,37 @@ export class AuthService {
       },
     });
     return user;
+  }
+
+  async updateMe(userId: string, dto: UpdateMeDto) {
+    const data: { name?: string; avatarUrl?: string | null } = {};
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.avatarUrl !== undefined) {
+      const url = dto.avatarUrl;
+      // null limpa a foto; string precisa ser data URL de imagem ou https
+      if (
+        url !== null &&
+        !AVATAR_DATA_URL_PATTERN.test(url) &&
+        !url.startsWith('https://')
+      ) {
+        throw new BadRequestException(
+          'avatarUrl deve ser data URL de imagem (jpeg/png/webp) ou https',
+        );
+      }
+      data.avatarUrl = url;
+    }
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException('Nada para atualizar');
+    }
+    return this.me(
+      (
+        await this.prisma.user.update({
+          where: { id: userId },
+          data,
+          select: { id: true },
+        })
+      ).id,
+    );
   }
 
   /** Emite o JWT da plataforma para um usuário já autenticado (ex.: OAuth). */

@@ -1,7 +1,11 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/models.dart';
+import '../../services/avatar_service.dart';
 import '../../state/auth_controller.dart';
 import '../../state/theme_controller.dart';
 import 'chat_screen.dart';
@@ -124,10 +128,48 @@ class _HomeShellState extends State<HomeShell> {
   }
 }
 
-/// Botão de perfil: avatar do usuário (foto do Google ou inicial do
-/// nome) com menu — informações da conta, alternância de tema e sair.
+/// Botão de perfil: avatar do usuário (foto própria, do Google ou
+/// inicial do nome) com menu — alterar foto, informações da conta,
+/// alternância de tema e sair.
 class UserMenuButton extends StatelessWidget {
   const UserMenuButton({super.key});
+
+  Future<void> _changePhoto(BuildContext context, {bool camera = false}) async {
+    final auth = context.read<AuthController>();
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Processando foto…'), duration: Duration(minutes: 1)),
+    );
+    try {
+      final avatar = AvatarService();
+      final dataUrl = camera
+          ? await avatar.shootAndProcess()
+          : await avatar.pickAndProcess();
+      if (dataUrl == null) {
+        messenger.hideCurrentSnackBar();
+        return;
+      }
+      final error = await auth.updateAvatar(dataUrl);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            error ?? 'Foto de perfil atualizada!',
+          ),
+        ),
+      );
+    } on FormatException {
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Arquivo de imagem inválido')),
+      );
+    } on FileSystemException {
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Não foi possível ler a imagem')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -138,6 +180,11 @@ class UserMenuButton extends StatelessWidget {
       offset: const Offset(0, 44),
       icon: _UserAvatar(user: user),
       onSelected: (value) {
+        if (value == 'photo_gallery') _changePhoto(context);
+        if (value == 'photo_camera') _changePhoto(context, camera: true);
+        if (value == 'photo_remove') {
+          context.read<AuthController>().updateAvatar(null, remove: true);
+        }
         if (value == 'theme') context.read<ThemeController>().toggle();
         if (value == 'logout') context.read<AuthController>().logout();
       },
@@ -152,6 +199,31 @@ class UserMenuButton extends StatelessWidget {
           ),
         ),
         const PopupMenuDivider(),
+        PopupMenuItem<String>(
+          value: 'photo_gallery',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.photo_outlined),
+            title: Text('Alterar foto (galeria)'),
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'photo_camera',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.photo_camera_outlined),
+            title: Text('Tirar foto'),
+          ),
+        ),
+        if (user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty)
+          PopupMenuItem<String>(
+            value: 'photo_remove',
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.no_photography_outlined),
+              title: Text('Remover foto'),
+            ),
+          ),
         PopupMenuItem<String>(
           value: 'theme',
           child: ListTile(
@@ -189,10 +261,24 @@ class _UserAvatar extends StatelessWidget {
             : user?.email ?? '?')
         .trim()[0]
         .toUpperCase();
+    ImageProvider? provider;
+    if (url != null && url.isNotEmpty) {
+      if (url.startsWith('data:')) {
+        try {
+          provider = MemoryImage(
+            base64Decode(url.substring(url.indexOf(',') + 1)),
+          );
+        } on FormatException {
+          provider = null;
+        }
+      } else {
+        provider = NetworkImage(url);
+      }
+    }
     return CircleAvatar(
       radius: radius,
-      backgroundImage: url != null && url.isNotEmpty ? NetworkImage(url) : null,
-      child: url == null || url.isEmpty ? Text(initial) : null,
+      backgroundImage: provider,
+      child: provider == null ? Text(initial) : null,
     );
   }
 }

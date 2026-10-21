@@ -37,6 +37,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>GIDClientID</key>
 	<string>1029334450863-ncac0fhj1boi36nn2gi9jbr8jvr78ef2.apps.googleusercontent.com</string>
+	<key>NSCameraUsageDescription</key>
+	<string>O NovaMind usa a câmera para você tirar uma foto de perfil.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>O NovaMind acessa suas fotos para você escolher uma imagem de perfil.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

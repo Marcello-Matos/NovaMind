@@ -26,6 +26,22 @@ class NovaMindApi {
 
   Future<User> me() async => User.fromJson(await client.get('/auth/me'));
 
+  /// Atualiza o perfil. `avatarDataUrl` salva a foto (data URL JPEG
+  /// processado); `removeAvatar: true` limpa a foto; omita ambos para
+  /// alterar apenas o nome.
+  Future<User> updateMe({
+    String? name,
+    String? avatarDataUrl,
+    bool removeAvatar = false,
+  }) async {
+    final body = <String, Object?>{
+      'name': ?name,
+      if (removeAvatar) 'avatarUrl': null,
+      'avatarUrl': ?avatarDataUrl,
+    };
+    return User.fromJson(await client.patch('/auth/me', body));
+  }
+
   // ===== login social =====
   Future<(String, User)> loginWithGoogle(String idToken) async {
     final res = await client.post('/auth/google', {'idToken': idToken});
