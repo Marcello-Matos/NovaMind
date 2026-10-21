@@ -204,11 +204,16 @@ export class OrchestratorService {
       'sexta-feira',
       'sábado',
     ][now.getUTCDay()];
+    const tomorrow = new Date(Date.now() - 3 * 60 * 60 * 1000 + 86_400_000)
+      .toISOString()
+      .slice(0, 10);
     const dateContext =
       `\n\nData/hora atual: ${weekday}, ${now.toISOString().slice(0, 10)} ` +
-      `${now.toISOString().slice(11, 16)} (horário de Brasília). ` +
+      `${now.toISOString().slice(11, 16)} (horário de Brasília, UTC-3). ` +
       'Compromissos com data/hora: create_calendar_event. ' +
-      'Lembretes com notificação no aparelho: create_reminder.';
+      'Lembretes com notificação no aparelho: create_reminder. ' +
+      'IMPORTANTE: emita datas/horas sempre com o offset -03:00 — ' +
+      `ex.: 9h de amanhã (${tomorrow}) = ${tomorrow}T09:00:00-03:00.`;
 
     const proactive =
       agent === AgentType.PERSONAL || !organizationId
