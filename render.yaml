@@ -31,14 +31,14 @@ services:
         sync: false
       # Domínio do static site abaixo — o CORS aceita só essa origem em prod.
       - key: WEB_ORIGIN
-        value: https://novamind-app.onrender.com
+        value: https://novamind-app-8hqi.onrender.com
 
   # ===== App Flutter Web (site estático) =====
   - type: web
     name: novamind-app
     runtime: static
     rootDir: apps/app
-    buildCommand: git clone --depth 1 -b stable https://github.com/flutter/flutter.git "$HOME/flutter-sdk" && export PATH="$HOME/flutter-sdk/bin:$PATH" && flutter pub get && flutter build web --release --dart-define=API_URL=https://novamind-api.onrender.com --dart-define=GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
+    buildCommand: git clone --depth 1 -b stable https://github.com/flutter/flutter.git "$HOME/flutter-sdk" && export PATH="$HOME/flutter-sdk/bin:$PATH" && flutter pub get && flutter build web --release --dart-define=API_URL=https://novamind-api-g4bl.onrender.com --dart-define=GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
     staticPublishPath: build/web
     pullRequestPreviewsEnabled: false
     envVars:
