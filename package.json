@@ -1,0 +1,26 @@
+{
+  "name": "novamind",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NovaMind — plataforma de assistentes inteligentes pessoais e empresariais",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:api": "npm run dev --workspace @novamind/api",
+    "dev:web": "npm run dev --workspace @novamind/web",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "db:generate": "npm run db:generate --workspace @novamind/api",
+    "db:migrate": "npm run db:migrate --workspace @novamind/api",
+    "db:push": "npm run db:push --workspace @novamind/api",
+    "db:studio": "npm run db:studio --workspace @novamind/api",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
