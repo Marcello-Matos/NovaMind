@@ -156,48 +156,84 @@ class _ChatScreenState extends State<ChatScreen> {
     _submit(content: 'Não quero executar a ação "${action.tool}".');
   }
 
+  /// Lista de conversas — usada como sidebar em telas largas e como
+  /// painel modal em telas estreitas.
+  Widget _conversationList({bool narrow = false}) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: FilledButton.tonalIcon(
+            onPressed: () {
+              if (narrow) Navigator.of(context).pop();
+              _newConversation();
+            },
+            icon: const Icon(Icons.add),
+            label: const Text('Nova conversa'),
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            itemCount: _conversations.length,
+            itemBuilder: (_, i) {
+              final c = _conversations[i];
+              return ListTile(
+                dense: true,
+                selected: c.id == _activeId,
+                title: Text(
+                  c.title ?? 'Sem título',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onTap: () {
+                  if (narrow) Navigator.of(context).pop();
+                  _open(c);
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showConversationPicker() {
+    showModalBottomSheet(
+      context: context,
+      showDragHandle: true,
+      builder: (_) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.6,
+          child: _conversationList(narrow: true),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final narrow = MediaQuery.of(context).size.width < 640;
     return Row(
       children: [
-        SizedBox(
-          width: 240,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: FilledButton.tonalIcon(
-                  onPressed: _newConversation,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Nova conversa'),
-                ),
-              ),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: _conversations.length,
-                  itemBuilder: (_, i) {
-                    final c = _conversations[i];
-                    return ListTile(
-                      dense: true,
-                      selected: c.id == _activeId,
-                      title: Text(
-                        c.title ?? 'Sem título',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      onTap: () => _open(c),
-                    );
-                  },
-                ),
-              ),
-            ],
+        if (!narrow)
+          SizedBox(
+            width: 240,
+            child: _conversationList(),
           ),
-        ),
-        const VerticalDivider(width: 1),
+        if (!narrow) const VerticalDivider(width: 1),
         Expanded(
           child: Column(
             children: [
+              if (narrow)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: IconButton(
+                    icon: const Icon(Icons.forum_outlined),
+                    tooltip: 'Conversas',
+                    onPressed: _showConversationPicker,
+                  ),
+                ),
               Expanded(
                 child: _messages.isEmpty
                     ? Center(

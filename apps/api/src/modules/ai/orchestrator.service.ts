@@ -94,6 +94,11 @@ export class OrchestratorService {
       const choice = completion.choices[0];
       promptTokens += completion.usage?.prompt_tokens ?? 0;
       completionTokens += completion.usage?.completion_tokens ?? 0;
+      if (!choice) {
+        this.logger.warn(`Resposta vazia da OpenAI na conversa ${conversationId}`);
+        content = 'Não recebi resposta do modelo. Tente novamente.';
+        break;
+      }
 
       const msg = choice.message;
       if (!msg.tool_calls?.length) {

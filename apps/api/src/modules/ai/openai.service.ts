@@ -1,4 +1,8 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  Injectable,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import type {
@@ -39,12 +43,34 @@ export class OpenAiService {
         'OPENAI_API_KEY não configurada — defina a chave no .env',
       );
     }
-    return this.client.chat.completions.create({
-      model: this.chatModel,
-      messages,
-      tools: tools?.length ? tools : undefined,
-      temperature: 0.4,
-    });
+    try {
+      return await this.client.chat.completions.create({
+        model: this.chatModel,
+        messages,
+        tools: tools?.length ? tools : undefined,
+        temperature: 0.4,
+      });
+    } catch (err) {
+      // Erros da OpenAI viravam 500 genérico — mapeia para mensagens úteis.
+      if (err instanceof OpenAI.APIError) {
+        if (err.status === 401) {
+          throw new ServiceUnavailableException(
+            'OPENAI_API_KEY inválida ou revogada — gere uma nova em ' +
+              'platform.openai.com/api-keys',
+          );
+        }
+        if (err.status === 429) {
+          throw new ServiceUnavailableException(
+            'OpenAI sem créditos ou limite de requisições — verifique ' +
+              'o billing em platform.openai.com',
+          );
+        }
+        throw new BadGatewayException(
+          `Falha na OpenAI (${err.status ?? 'rede'}): ${err.message}`,
+        );
+      }
+      throw err;
+    }
   }
 
   estimateCostUsd(
