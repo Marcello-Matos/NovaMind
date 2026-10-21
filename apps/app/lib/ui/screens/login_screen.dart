@@ -58,13 +58,17 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const ClipRRect(
-                    borderRadius: BorderRadius.all(Radius.circular(24)),
-                    child: Image(
-                      image: AssetImage('assets/images/novamind_logo.png'),
-                      width: 104,
-                      height: 104,
-                      fit: BoxFit.cover,
+                  Center(
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.all(
+                        Radius.circular(24),
+                      ),
+                      child: Image.asset(
+                        'assets/images/novamind_logo.png',
+                        width: 104,
+                        height: 104,
+                        fit: BoxFit.cover,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 20),
