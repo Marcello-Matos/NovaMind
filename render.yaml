@@ -37,7 +37,6 @@ services:
   - type: web
     name: novamind-app
     runtime: static
-    plan: free
     rootDir: apps/app
     buildCommand: >-
       git clone --depth 1 -b stable https://github.com/flutter/flutter.git "$HOME/flutter-sdk" &&
