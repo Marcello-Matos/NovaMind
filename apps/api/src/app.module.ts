@@ -14,6 +14,10 @@ import { KnowledgeBaseModule } from './modules/knowledge-base/knowledge-base.mod
 import { UsageModule } from './modules/usage/usage.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { CalendarModule } from './modules/calendar/calendar.module';
+import { HabitsModule } from './modules/habits/habits.module';
+import { NotesModule } from './modules/notes/notes.module';
+import { RemindersModule } from './modules/reminders/reminders.module';
 
 @Module({
   imports: [
@@ -35,6 +39,10 @@ import { AdminModule } from './modules/admin/admin.module';
     UsageModule,
     AuditModule,
     AdminModule,
+    CalendarModule,
+    HabitsModule,
+    NotesModule,
+    RemindersModule,
   ],
 })
 export class AppModule {}

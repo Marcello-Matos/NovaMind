@@ -104,7 +104,7 @@ export const TOOL_DEFINITIONS: Record<string, ToolDefinition> = {
       function: {
         name: 'create_calendar_event',
         description:
-          'Propõe um compromisso na agenda. Sensível: exige confirmação do usuário antes de gravar.',
+          'Propõe um compromisso na agenda do usuário. Sensível: exige confirmação do usuário antes de gravar.',
         parameters: {
           type: 'object',
           properties: {
@@ -112,8 +112,126 @@ export const TOOL_DEFINITIONS: Record<string, ToolDefinition> = {
             startsAt: { type: 'string', description: 'ISO 8601' },
             endsAt: { type: 'string', description: 'ISO 8601' },
             location: { type: 'string' },
+            description: { type: 'string' },
           },
           required: ['title', 'startsAt'],
+        },
+      },
+    },
+  },
+  create_reminder: {
+    sensitive: false,
+    spec: {
+      type: 'function',
+      function: {
+        name: 'create_reminder',
+        description:
+          'Cria um lembrete com notificação no aparelho do usuário no horário indicado.',
+        parameters: {
+          type: 'object',
+          properties: {
+            title: { type: 'string' },
+            remindAt: {
+              type: 'string',
+              description: 'Data/hora do lembrete em ISO 8601',
+            },
+            repeatRule: {
+              type: 'string',
+              enum: ['NONE', 'DAILY', 'WEEKLY'],
+              description: 'Repetição do lembrete (padrão NONE)',
+            },
+          },
+          required: ['title', 'remindAt'],
+        },
+      },
+    },
+  },
+  create_note: {
+    sensitive: false,
+    spec: {
+      type: 'function',
+      function: {
+        name: 'create_note',
+        description:
+          'Salva uma anotação no escopo atual (pessoal ou da organização da conversa).',
+        parameters: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Título curto da anotação' },
+            content: { type: 'string', description: 'Conteúdo da anotação' },
+            tags: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Etiquetas opcionais',
+            },
+          },
+          required: ['title', 'content'],
+        },
+      },
+    },
+  },
+  search_notes: {
+    sensitive: false,
+    spec: {
+      type: 'function',
+      function: {
+        name: 'search_notes',
+        description:
+          'Busca anotações do escopo atual (pessoal ou da organização) por palavra-chave.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: { type: 'string', description: 'Palavra-chave da busca' },
+          },
+          required: ['query'],
+        },
+      },
+    },
+  },
+  create_habit: {
+    sensitive: false,
+    spec: {
+      type: 'function',
+      function: {
+        name: 'create_habit',
+        description:
+          'Cria um hábito para o usuário acompanhar diariamente/semanalmente.',
+        parameters: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', description: 'Nome do hábito (ex.: "Beber 2L de água")' },
+            daysOfWeek: {
+              type: 'string',
+              description:
+                'Dias em que vale, 0=domingo, ex.: "1,3,5" (padrão: todos os dias)',
+            },
+          },
+          required: ['name'],
+        },
+      },
+    },
+  },
+  log_habit: {
+    sensitive: false,
+    spec: {
+      type: 'function',
+      function: {
+        name: 'log_habit',
+        description:
+          'Marca um hábito como concluído hoje (ou no dia indicado).',
+        parameters: {
+          type: 'object',
+          properties: {
+            name: {
+              type: 'string',
+              description: 'Nome (ou parte) do hábito a marcar',
+            },
+            date: {
+              type: 'string',
+              description: 'Dia em yyyy-mm-dd (padrão: hoje)',
+            },
+          },
+          required: ['name'],
         },
       },
     },

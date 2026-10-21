@@ -42,6 +42,114 @@ class NovaMindApi {
     return User.fromJson(await client.patch('/auth/me', body));
   }
 
+  // ===== agenda / hábitos / notas / lembretes =====
+
+  /// Compromissos no intervalo [from, to). Default: mês atual.
+  Future<List<CalendarEventItem>> listEvents({
+    DateTime? from,
+    DateTime? to,
+    String? organizationId,
+  }) async {
+    final q = <String, String>{
+      'from': ?from?.toIso8601String(),
+      'to': ?to?.toIso8601String(),
+      'organizationId': ?organizationId,
+    };
+    final res = await client.get('/calendar', q);
+    return (res as List).map((e) => CalendarEventItem.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<CalendarEventItem> createEvent({
+    required String title,
+    required DateTime startsAt,
+    DateTime? endsAt,
+    String? description,
+    String? location,
+    bool allDay = false,
+    String? organizationId,
+  }) async =>
+      CalendarEventItem.fromJson(await client.post('/calendar', {
+        'title': title,
+        'startsAt': startsAt.toIso8601String(),
+        'endsAt': ?endsAt,
+        'description': ?description,
+        'location': ?location,
+        'allDay': allDay,
+        'organizationId': ?organizationId,
+      }));
+
+  Future<void> deleteEvent(String id) => client.delete('/calendar/$id');
+
+  Future<List<Habit>> listHabits() async {
+    final res = await client.get('/habits');
+    return (res as List).map((e) => Habit.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<Habit> createHabit(String name, {String? daysOfWeek}) async =>
+      Habit.fromJson(await client.post('/habits', {
+        'name': name,
+        'daysOfWeek': ?daysOfWeek,
+      }));
+
+  Future<void> deleteHabit(String id) => client.delete('/habits/$id');
+
+  /// Marca/desmarca o hábito hoje.
+  Future<void> toggleHabitToday(String habitId, {bool done = true}) =>
+      client.post('/habits/$habitId/log', {'done': done});
+
+  Future<List<HabitSummary>> habitSummary() async {
+    final res = await client.get('/habits/summary');
+    return (res as List).map((e) => HabitSummary.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<List<NoteItem>> listNotes({String? organizationId}) async {
+    final res = await client.get('/notes', {
+      'organizationId': ?organizationId,
+    });
+    return (res as List).map((e) => NoteItem.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<NoteItem> createNote({
+    required String title,
+    required String content,
+    String? organizationId,
+  }) async =>
+      NoteItem.fromJson(await client.post('/notes', {
+        'title': title,
+        'content': content,
+        'organizationId': ?organizationId,
+      }));
+
+  Future<void> deleteNote(String id) => client.delete('/notes/$id');
+
+  Future<List<ReminderItem>> listReminders() async {
+    final res = await client.get('/reminders');
+    return (res as List).map((e) => ReminderItem.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<ReminderItem> createReminder({
+    required String title,
+    required DateTime remindAt,
+    String repeatRule = 'NONE',
+  }) async =>
+      ReminderItem.fromJson(await client.post('/reminders', {
+        'title': title,
+        'remindAt': remindAt.toIso8601String(),
+        'repeatRule': repeatRule,
+      }));
+
+  Future<void> deleteReminder(String id) => client.delete('/reminders/$id');
+
+  /// Confirma lembretes cuja notificação local o app já tratou.
+  Future<void> ackReminder(String id) =>
+      client.post('/reminders/$id/ack', {});
+
+  /// Lembretes vencidos ainda não confirmados — base das notificações locais.
+  Future<List<ReminderItem>> dueReminders() async {
+    final res = await client.get('/reminders/due');
+    return (res as List).map((e) => ReminderItem.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
   // ===== login social =====
   Future<(String, User)> loginWithGoogle(String idToken) async {
     final res = await client.post('/auth/google', {'idToken': idToken});

@@ -91,6 +91,11 @@ model User {
   auditEvents    AuditEvent[]       @relation("AuditActor")
   documents      KnowledgeDocument[] @relation("DocumentUploader")
   oauthAccounts  OauthAccount[]
+  calendarEvents CalendarEvent[]
+  habits         Habit[]
+  notes          Note[]
+  reminders      Reminder[]
+  googleCalendar GoogleCalendarAccount?
 
   @@map("users")
 }
@@ -125,6 +130,8 @@ model Organization {
   leads         Lead[]
   subscriptions Subscription[]
   usageEvents   UsageEvent[]
+  calendarEvents CalendarEvent[]
+  notes          Note[]
   integrations  Integration[]
   auditEvents   AuditEvent[]
 
@@ -341,6 +348,133 @@ model Integration {
 
   @@index([organizationId, provider])
   @@map("integrations")
+}
+
+// ============ AGENDA, HÁBITOS, NOTAS E LEMBRETES ============
+
+enum CalendarEventSource {
+  APP
+  AGENT
+  GOOGLE
+}
+
+model CalendarEvent {
+  id             String              @id @default(uuid())
+  ownerId        String              @map("owner_id")
+  organizationId String?             @map("organization_id")
+  title          String
+  description    String?
+  location       String?
+  startsAt       DateTime            @map("starts_at")
+  endsAt         DateTime?           @map("ends_at")
+  allDay         Boolean             @default(false) @map("all_day")
+  source         CalendarEventSource @default(APP)
+  googleEventId  String?             @map("google_event_id")
+  googleSyncedAt DateTime?           @map("google_synced_at")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+
+  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, googleEventId])
+  @@index([ownerId, startsAt])
+  @@index([organizationId, startsAt])
+  @@map("calendar_events")
+}
+
+model Habit {
+  id         String   @id @default(uuid())
+  ownerId    String   @map("owner_id")
+  name       String
+  icon       String?
+  color      String?
+  daysOfWeek String   @default("0,1,2,3,4,5,6") @map("days_of_week") // dias em que vale, 0=dom
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  owner User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  logs  HabitLog[]
+
+  @@index([ownerId, active])
+  @@map("habits")
+}
+
+model HabitLog {
+  id      String   @id @default(uuid())
+  habitId String   @map("habit_id")
+  date    DateTime @db.Date // dia (00:00 UTC representativo do dia local)
+  done    Boolean  @default(true)
+  note    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  habit Habit @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  @@unique([habitId, date])
+  @@map("habit_logs")
+}
+
+model Note {
+  id             String   @id @default(uuid())
+  ownerId        String   @map("owner_id")
+  organizationId String?  @map("organization_id") // null = nota pessoal
+  title          String
+  content        String   @db.Text
+  pinned         Boolean  @default(false)
+  tags           String[] @default([])
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  owner        User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, updatedAt])
+  @@index([organizationId, updatedAt])
+  @@map("notes")
+}
+
+enum ReminderRepeat {
+  NONE
+  DAILY
+  WEEKLY
+}
+
+model Reminder {
+  id             String         @id @default(uuid())
+  ownerId        String         @map("owner_id")
+  title          String
+  remindAt       DateTime       @map("remind_at")
+  repeatRule     ReminderRepeat @default(NONE) @map("repeat_rule")
+  source         String         @default("manual") // manual | agent | task | event
+  taskId         String?        @map("task_id")
+  eventId        String?        @map("event_id")
+  localNotified  Boolean        @default(false) @map("local_notified") // app já agendou a notificação local
+  firedAt        DateTime?      @map("fired_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, remindAt])
+  @@map("reminders")
+}
+
+// Conta Google Calendar do usuário (integração pessoal, não da organização)
+model GoogleCalendarAccount {
+  id                String    @id @default(uuid())
+  userId            String    @unique @map("user_id")
+  googleEmail       String    @map("google_email")
+  refreshToken      String    @map("refresh_token") // cifrado (AES-256-GCM, chave em GOOGLE_TOKEN_SECRET)
+  scope             String
+  syncToken         String?   @map("sync_token") // sync incremental do Google
+  connectedAt       DateTime  @default(now()) @map("connected_at")
+  lastSyncAt        DateTime? @map("last_sync_at")
+  lastSyncDirection String?   @map("last_sync_direction")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("google_calendar_accounts")
 }
 
 model AuditEvent {

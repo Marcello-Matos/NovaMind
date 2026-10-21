@@ -145,6 +145,103 @@ export class ToolExecutorService {
       }
 
       case 'create_calendar_event':
+        return this.prisma.calendarEvent.create({
+          data: {
+            ownerId: ctx.userId,
+            organizationId: ctx.organizationId,
+            title: String(args.title),
+            description: args.description ? String(args.description) : undefined,
+            location: args.location ? String(args.location) : undefined,
+            startsAt: new Date(String(args.startsAt)),
+            endsAt: args.endsAt ? new Date(String(args.endsAt)) : null,
+            source: 'AGENT',
+          },
+        });
+
+      case 'create_reminder':
+        return this.prisma.reminder.create({
+          data: {
+            ownerId: ctx.userId,
+            title: String(args.title),
+            remindAt: new Date(String(args.remindAt)),
+            repeatRule: (args.repeatRule as 'NONE' | 'DAILY' | 'WEEKLY') ?? 'NONE',
+            source: 'agent',
+          },
+        });
+
+      case 'create_note':
+        return this.prisma.note.create({
+          data: {
+            ownerId: ctx.userId,
+            organizationId: ctx.organizationId,
+            title: String(args.title),
+            content: String(args.content),
+            tags: Array.isArray(args.tags) ? args.tags.map(String) : [],
+          },
+        });
+
+      case 'search_notes': {
+        const query = String(args.query ?? '');
+        const notes = await this.prisma.note.findMany({
+          where: {
+            OR: [
+              { title: { contains: query, mode: 'insensitive' } },
+              { content: { contains: query, mode: 'insensitive' } },
+            ],
+            ...(ctx.organizationId
+              ? { organizationId: ctx.organizationId }
+              : { ownerId: ctx.userId, organizationId: null }),
+          },
+          take: 5,
+          orderBy: { updatedAt: 'desc' },
+          select: { title: true, content: true, updatedAt: true },
+        });
+        return {
+          matches: notes.map((n) => ({
+            title: n.title,
+            excerpt: n.content.slice(0, 400),
+          })),
+        };
+      }
+
+      case 'create_habit':
+        return this.prisma.habit.create({
+          data: {
+            ownerId: ctx.userId,
+            name: String(args.name),
+            daysOfWeek: args.daysOfWeek ? String(args.daysOfWeek) : '0,1,2,3,4,5,6',
+          },
+        });
+
+      case 'log_habit': {
+        const name = String(args.name ?? '').toLowerCase();
+        const habit = await this.prisma.habit.findFirst({
+          where: {
+            ownerId: ctx.userId,
+            active: true,
+            name: { contains: name, mode: 'insensitive' },
+          },
+        });
+        if (!habit) {
+          return { error: `Hábito não encontrado: ${name}` };
+        }
+        const day = args.date
+          ? new Date(`${String(args.date)}T00:00:00.000Z`)
+          : new Date(
+              Date.UTC(
+                new Date().getFullYear(),
+                new Date().getMonth(),
+                new Date().getDate(),
+              ),
+            );
+        await this.prisma.habitLog.upsert({
+          where: { habitId_date: { habitId: habit.id, date: day } },
+          create: { habitId: habit.id, date: day, done: true },
+          update: { done: true },
+        });
+        return { habit: habit.name, date: day.toISOString().slice(0, 10), done: true };
+      }
+
       case 'send_message':
         // Integrações externas entram na fase de automações (semanas 7–8).
         return {

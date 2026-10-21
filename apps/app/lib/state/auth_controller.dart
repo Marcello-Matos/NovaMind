@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 import '../services/api_client.dart';
 import '../services/novamind_api.dart';
+import '../services/reminder_notifications.dart';
 
 /// Estado de autenticação e ambiente ativo (pessoal vs. organização).
 /// Persiste o token e a organização selecionada em shared_preferences —
@@ -137,6 +138,10 @@ class AuthController extends ChangeNotifier {
     client.token = token;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_tokenKey, token);
+    // Sincroniza lembretes (notificações locais) após cada login.
+    if (!kIsWeb) {
+      ReminderNotificationService(api: api).syncReminders();
+    }
   }
 
   Future<void> _clearSession() async {

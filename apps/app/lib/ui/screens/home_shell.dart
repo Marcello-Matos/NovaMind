@@ -8,8 +8,10 @@ import '../../models/models.dart';
 import '../../services/avatar_service.dart';
 import '../../state/auth_controller.dart';
 import '../../state/theme_controller.dart';
+import 'agenda_screen.dart';
 import 'chat_screen.dart';
 import 'documents_screen.dart';
+import 'habits_notes_screen.dart';
 import 'memory_screen.dart';
 import 'tasks_screen.dart';
 import 'usage_screen.dart';
@@ -28,14 +30,18 @@ class _HomeShellState extends State<HomeShell> {
   static const _destinations = [
     (icon: Icons.chat_bubble_outline, label: 'Chat'),
     (icon: Icons.check_circle_outline, label: 'Tarefas'),
+    (icon: Icons.calendar_month_outlined, label: 'Agenda'),
+    (icon: Icons.repeat_outlined, label: 'Rotina'),
     (icon: Icons.psychology_outlined, label: 'Memória'),
-    (icon: Icons.folder_outlined, label: 'Documentos'),
-    (icon: Icons.insights_outlined, label: 'Uso e plano'),
+    (icon: Icons.folder_outlined, label: 'Docs'),
+    (icon: Icons.insights_outlined, label: 'Uso'),
   ];
 
   static const _screens = [
     ChatScreen(),
     TasksScreen(),
+    AgendaScreen(),
+    HabitsNotesScreen(),
     MemoryScreen(),
     DocumentsScreen(),
     UsageScreen(),
