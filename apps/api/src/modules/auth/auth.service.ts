@@ -47,7 +47,12 @@ export class AuthService {
     ) {
       throw new UnauthorizedException('Credenciais inválidas');
     }
-    return this.buildAuthResponse(user.id, user.email, user.name);
+    return this.buildAuthResponse(
+      user.id,
+      user.email,
+      user.name,
+      user.avatarUrl,
+    );
   }
 
   async me(userId: string) {
@@ -57,6 +62,7 @@ export class AuthService {
         id: true,
         email: true,
         name: true,
+        avatarUrl: true,
         createdAt: true,
         members: {
           select: {
@@ -70,15 +76,25 @@ export class AuthService {
   }
 
   /** Emite o JWT da plataforma para um usuário já autenticado (ex.: OAuth). */
-  async loginResponseFor(userId: string, email: string, name: string) {
-    return this.buildAuthResponse(userId, email, name);
+  async loginResponseFor(
+    userId: string,
+    email: string,
+    name: string,
+    avatarUrl: string | null,
+  ) {
+    return this.buildAuthResponse(userId, email, name, avatarUrl);
   }
 
-  private async buildAuthResponse(userId: string, email: string, name: string) {
+  private async buildAuthResponse(
+    userId: string,
+    email: string,
+    name: string,
+    avatarUrl: string | null = null,
+  ) {
     const accessToken = await this.jwt.signAsync({ sub: userId, email });
     return {
       accessToken,
-      user: { id: userId, email, name },
+      user: { id: userId, email, name, avatarUrl },
     };
   }
 }

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/models.dart';
 import '../../state/auth_controller.dart';
+import '../../state/theme_controller.dart';
 import 'chat_screen.dart';
 import 'documents_screen.dart';
 import 'memory_screen.dart';
@@ -67,10 +69,8 @@ class _HomeShellState extends State<HomeShell> {
         appBar: AppBar(
           title: const Text('NovaMind'),
           actions: [
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: SizedBox(width: 150, child: orgSelector),
-            ),
+            SizedBox(width: 130, child: orgSelector),
+            const UserMenuButton(),
           ],
         ),
         body: body,
@@ -105,16 +105,12 @@ class _HomeShellState extends State<HomeShell> {
                 const SizedBox(height: 8),
               ],
             ),
-            trailing: Expanded(
+            trailing: const Expanded(
               child: Align(
                 alignment: Alignment.bottomCenter,
                 child: Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: IconButton(
-                    tooltip: 'Sair (${auth.user?.email ?? ''})',
-                    icon: const Icon(Icons.logout),
-                    onPressed: auth.logout,
-                  ),
+                  padding: EdgeInsets.only(bottom: 12),
+                  child: UserMenuButton(),
                 ),
               ),
             ),
@@ -124,6 +120,79 @@ class _HomeShellState extends State<HomeShell> {
           Expanded(child: body),
         ],
       ),
+    );
+  }
+}
+
+/// Botão de perfil: avatar do usuário (foto do Google ou inicial do
+/// nome) com menu — informações da conta, alternância de tema e sair.
+class UserMenuButton extends StatelessWidget {
+  const UserMenuButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = context.watch<AuthController>().user;
+    final theme = context.watch<ThemeController>();
+    return PopupMenuButton<String>(
+      tooltip: 'Conta (${user?.email ?? ''})',
+      offset: const Offset(0, 44),
+      icon: _UserAvatar(user: user),
+      onSelected: (value) {
+        if (value == 'theme') context.read<ThemeController>().toggle();
+        if (value == 'logout') context.read<AuthController>().logout();
+      },
+      itemBuilder: (_) => [
+        PopupMenuItem<String>(
+          enabled: false,
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: _UserAvatar(user: user, radius: 20),
+            title: Text(user?.name ?? ''),
+            subtitle: Text(user?.email ?? ''),
+          ),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem<String>(
+          value: 'theme',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(theme.isDark
+                ? Icons.light_mode_outlined
+                : Icons.dark_mode_outlined),
+            title: Text(theme.isDark ? 'Tema claro' : 'Tema escuro'),
+          ),
+        ),
+        const PopupMenuItem<String>(
+          value: 'logout',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.logout),
+            title: Text('Sair'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _UserAvatar extends StatelessWidget {
+  final User? user;
+  final double radius;
+
+  const _UserAvatar({required this.user, this.radius = 16});
+
+  @override
+  Widget build(BuildContext context) {
+    final url = user?.avatarUrl;
+    final initial = (user?.name.isNotEmpty == true
+            ? user!.name
+            : user?.email ?? '?')
+        .trim()[0]
+        .toUpperCase();
+    return CircleAvatar(
+      radius: radius,
+      backgroundImage: url != null && url.isNotEmpty ? NetworkImage(url) : null,
+      child: url == null || url.isEmpty ? Text(initial) : null,
     );
   }
 }

@@ -2,12 +2,14 @@ class User {
   final String id;
   final String email;
   final String name;
+  final String? avatarUrl;
   final List<Membership> members;
 
   User({
     required this.id,
     required this.email,
     required this.name,
+    this.avatarUrl,
     this.members = const [],
   });
 
@@ -15,6 +17,7 @@ class User {
         id: json['id'] as String,
         email: json['email'] as String,
         name: json['name'] as String,
+        avatarUrl: json['avatarUrl'] as String?,
         members: (json['members'] as List<dynamic>? ?? [])
             .map((m) => Membership.fromJson(m))
             .toList(),

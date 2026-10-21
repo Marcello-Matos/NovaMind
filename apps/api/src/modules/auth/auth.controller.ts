@@ -29,14 +29,24 @@ export class AuthController {
   async google(@Body() dto: GoogleLoginDto) {
     const identity = await this.oauth.verifyGoogle(dto.idToken);
     const user = await this.oauth.findOrCreateUser(identity);
-    return this.auth.loginResponseFor(user.id, user.email, user.name);
+    return this.auth.loginResponseFor(
+      user.id,
+      user.email,
+      user.name,
+      user.avatarUrl,
+    );
   }
 
   @Post('apple')
   async apple(@Body() dto: AppleLoginDto) {
     const identity = await this.oauth.verifyApple(dto.identityToken, dto.name);
     const user = await this.oauth.findOrCreateUser(identity);
-    return this.auth.loginResponseFor(user.id, user.email, user.name);
+    return this.auth.loginResponseFor(
+      user.id,
+      user.email,
+      user.name,
+      user.avatarUrl,
+    );
   }
 
   @Get('me')

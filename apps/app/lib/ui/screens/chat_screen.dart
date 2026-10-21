@@ -21,6 +21,7 @@ class _ChatScreenState extends State<ChatScreen> {
   String? _activeId;
   bool _sending = false;
   String? _error;
+  bool _listExpanded = false;
 
   @override
   void initState() {
@@ -157,15 +158,15 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   /// Lista de conversas — usada como sidebar em telas largas e como
-  /// painel modal em telas estreitas.
-  Widget _conversationList({bool narrow = false}) {
+  /// painel expansível no topo em telas estreitas.
+  Widget _conversationList({VoidCallback? onPick}) {
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.all(12),
           child: FilledButton.tonalIcon(
             onPressed: () {
-              if (narrow) Navigator.of(context).pop();
+              onPick?.call();
               _newConversation();
             },
             icon: const Icon(Icons.add),
@@ -186,7 +187,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 onTap: () {
-                  if (narrow) Navigator.of(context).pop();
+                  onPick?.call();
                   _open(c);
                 },
               );
@@ -194,19 +195,6 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  void _showConversationPicker() {
-    showModalBottomSheet(
-      context: context,
-      showDragHandle: true,
-      builder: (_) => SafeArea(
-        child: SizedBox(
-          height: MediaQuery.of(context).size.height * 0.6,
-          child: _conversationList(narrow: true),
-        ),
-      ),
     );
   }
 
@@ -225,15 +213,41 @@ class _ChatScreenState extends State<ChatScreen> {
         Expanded(
           child: Column(
             children: [
-              if (narrow)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: IconButton(
-                    icon: const Icon(Icons.forum_outlined),
-                    tooltip: 'Conversas',
-                    onPressed: _showConversationPicker,
+              // Divisão horizontal em telas pequenas: lista de conversas
+              // expansível no topo, chat ocupando o resto da tela.
+              if (narrow) ...[
+                InkWell(
+                  onTap: () =>
+                      setState(() => _listExpanded = !_listExpanded),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.forum_outlined, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Conversas (${_conversations.length})',
+                            style: theme.textTheme.titleSmall,
+                          ),
+                        ),
+                        Icon(_listExpanded
+                            ? Icons.expand_less
+                            : Icons.expand_more),
+                      ],
+                    ),
                   ),
                 ),
+                if (_listExpanded)
+                  SizedBox(
+                    height: 220,
+                    child: _conversationList(
+                      onPick: () => setState(() => _listExpanded = false),
+                    ),
+                  ),
+                const Divider(height: 1),
+              ],
               Expanded(
                 child: _messages.isEmpty
                     ? Center(

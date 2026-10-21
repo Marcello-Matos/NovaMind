@@ -9,6 +9,7 @@ interface SocialIdentity {
   providerUserId: string; // "sub"
   email: string;
   name?: string;
+  avatarUrl?: string;
 }
 
 /**
@@ -62,6 +63,7 @@ export class OauthService {
         providerUserId: payload.sub,
         email: payload.email.toLowerCase(),
         name: payload.name ?? undefined,
+        avatarUrl: payload.picture ?? undefined,
       };
     } catch {
       throw new UnauthorizedException('Token do Google inválido');
@@ -116,11 +118,16 @@ export class OauthService {
 
     const user = await this.prisma.user.upsert({
       where: { email: identity.email },
-      update: {},
+      // Atualiza nome/foto apenas quando o provedor os envia — o usuário
+      // pode ter personalizado o nome depois do primeiro login social.
+      update: {
+        avatarUrl: identity.avatarUrl ?? undefined,
+      },
       create: {
         email: identity.email,
         name: identity.name ?? identity.email.split('@')[0],
         passwordHash: null,
+        avatarUrl: identity.avatarUrl ?? null,
       },
     });
 

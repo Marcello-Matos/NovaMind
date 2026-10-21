@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'state/auth_controller.dart';
+import 'state/theme_controller.dart';
 import 'ui/screens/home_shell.dart';
 import 'ui/screens/login_screen.dart';
+
+const _seed = Color(0xFF6366F1);
 
 void main() {
   runApp(const NovaMindApp());
@@ -14,21 +17,30 @@ class NovaMindApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => AuthController()..restore(),
-      child: MaterialApp(
-        title: 'NovaMind',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          useMaterial3: true,
-          brightness: Brightness.dark,
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFF6366F1),
-            brightness: Brightness.dark,
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthController()..restore()),
+        ChangeNotifierProvider(create: (_) => ThemeController()..restore()),
+      ],
+      child: Builder(
+        builder: (context) => MaterialApp(
+          title: 'NovaMind',
+          debugShowCheckedModeBanner: false,
+          themeMode: context.watch<ThemeController>().mode,
+          theme: ThemeData(
+            useMaterial3: true,
+            colorScheme: ColorScheme.fromSeed(seedColor: _seed),
           ),
-          scaffoldBackgroundColor: const Color(0xFF0B0F17),
+          darkTheme: ThemeData(
+            useMaterial3: true,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: _seed,
+              brightness: Brightness.dark,
+            ),
+            scaffoldBackgroundColor: const Color(0xFF0B0F17),
+          ),
+          home: const Root(),
         ),
-        home: const Root(),
       ),
     );
   }
