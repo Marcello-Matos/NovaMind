@@ -1,7 +1,10 @@
 import {
+  IsNumber,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
+  Min,
   MinLength,
   ValidateIf,
 } from 'class-validator';
@@ -23,4 +26,11 @@ export class UpdateMeDto {
   @IsString()
   @MaxLength(200_000, { message: 'Imagem muito grande (máx. ~150KB)' })
   avatarUrl?: string | null;
+
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null)
+  @IsNumber()
+  @Min(0)
+  @Max(10080, { message: 'Máximo de 10080 minutos (7 dias)' })
+  eventReminderMinutes?: number | null;
 }

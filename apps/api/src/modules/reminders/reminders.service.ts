@@ -87,6 +87,50 @@ export class RemindersService {
     return { deleted: true };
   }
 
+  /**
+   * Lembrete automático de compromisso: cria/atualiza/remove conforme a
+   * preferência do usuário (eventReminderMinutes; null = 60, 0 = desativado).
+   */
+  async syncEventReminder(
+    userId: string,
+    event: { id: string; title: string; startsAt: Date; isHoliday?: boolean },
+  ) {
+    if (event.isHoliday) return;
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { eventReminderMinutes: true },
+    });
+    const minutes = user?.eventReminderMinutes ?? 60;
+    const existing = await this.prisma.reminder.findFirst({
+      where: { ownerId: userId, eventId: event.id, source: 'event' },
+    });
+    if (minutes <= 0) {
+      if (existing) {
+        await this.prisma.reminder.delete({ where: { id: existing.id } });
+      }
+      return;
+    }
+    const remindAt = new Date(event.startsAt.getTime() - minutes * 60_000);
+    if (remindAt.getTime() <= Date.now()) return; // já passou — sem lembrete
+    const data = {
+      title: `Lembrete: ${event.title}`,
+      remindAt,
+    };
+    if (existing) {
+      await this.prisma.reminder.update({ where: { id: existing.id }, data });
+    } else {
+      await this.prisma.reminder.create({
+        data: {
+          ownerId: userId,
+          ...data,
+          repeatRule: 'NONE',
+          source: 'event',
+          eventId: event.id,
+        },
+      });
+    }
+  }
+
   private async findOwned(userId: string, reminderId: string) {
     const reminder = await this.prisma.reminder.findFirst({
       where: { id: reminderId, ownerId: userId },

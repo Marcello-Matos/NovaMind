@@ -68,6 +68,7 @@ export class AuthService {
         email: true,
         name: true,
         avatarUrl: true,
+        eventReminderMinutes: true,
         createdAt: true,
         members: {
           select: {
@@ -81,8 +82,21 @@ export class AuthService {
   }
 
   async updateMe(userId: string, dto: UpdateMeDto) {
-    const data: { name?: string; avatarUrl?: string | null } = {};
+    const data: {
+      name?: string;
+      avatarUrl?: string | null;
+      eventReminderMinutes?: number | null;
+    } = {};
     if (dto.name !== undefined) data.name = dto.name;
+    if (dto.eventReminderMinutes !== undefined) {
+      const m = dto.eventReminderMinutes;
+      if (m !== null && (typeof m !== 'number' || m < 0 || m > 10080)) {
+        throw new BadRequestException(
+          'eventReminderMinutes deve estar entre 0 e 10080 (7 dias) ou null para o padrão',
+        );
+      }
+      data.eventReminderMinutes = m;
+    }
     if (dto.avatarUrl !== undefined) {
       const url = dto.avatarUrl;
       // null limpa a foto; string precisa ser data URL de imagem ou https

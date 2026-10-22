@@ -3,6 +3,7 @@ class User {
   final String email;
   final String name;
   final String? avatarUrl;
+  final int? eventReminderMinutes; // null = padrão 60, 0 = desativado
   final List<Membership> members;
 
   User({
@@ -10,6 +11,7 @@ class User {
     required this.email,
     required this.name,
     this.avatarUrl,
+    this.eventReminderMinutes,
     this.members = const [],
   });
 
@@ -18,6 +20,7 @@ class User {
         email: json['email'] as String,
         name: json['name'] as String,
         avatarUrl: json['avatarUrl'] as String?,
+        eventReminderMinutes: json['eventReminderMinutes'] as int?,
         members: (json['members'] as List<dynamic>? ?? [])
             .map((m) => Membership.fromJson(m))
             .toList(),
@@ -219,6 +222,7 @@ class CalendarEventItem {
   final DateTime? endsAt;
   final bool allDay;
   final String source; // APP | AGENT | GOOGLE
+  final bool isHoliday; // feriado importado do Google (somente leitura)
 
   CalendarEventItem({
     required this.id,
@@ -229,6 +233,7 @@ class CalendarEventItem {
     this.endsAt,
     required this.allDay,
     required this.source,
+    this.isHoliday = false,
   });
 
   factory CalendarEventItem.fromJson(Map<String, dynamic> json) =>
@@ -243,6 +248,7 @@ class CalendarEventItem {
             : DateTime.parse(json['endsAt'] as String),
         allDay: json['allDay'] as bool? ?? false,
         source: json['source'] as String? ?? 'APP',
+        isHoliday: json['isHoliday'] as bool? ?? false,
       );
 }
 

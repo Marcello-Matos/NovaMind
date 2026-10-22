@@ -10,12 +10,16 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as crypto from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RemindersService } from '../reminders/reminders.service';
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 const GOOGLE_EVENTS_URL =
   'https://www.googleapis.com/calendar/v3/calendars/primary/events';
+// Agenda oficial de feriados nacionais do Brasil (somente leitura).
+const GOOGLE_HOLIDAY_CALENDAR_ID =
+  'pt_brazilian#holiday@group.v.calendar.google.com';
 const SCOPES = ['https://www.googleapis.com/auth/calendar.events'];
 
 /**
@@ -37,6 +41,7 @@ export class GoogleCalendarService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly jwt: JwtService,
+    private readonly reminders: RemindersService,
   ) {}
 
   // ===== OAuth =====
@@ -250,14 +255,15 @@ export class GoogleCalendarService {
             !existing.googleSyncedAt ||
             existing.updatedAt <= (existing.googleSyncedAt ?? new Date(0))
           ) {
-            await this.prisma.calendarEvent.update({
+            const updated = await this.prisma.calendarEvent.update({
               where: { id: existing.id },
               data: { ...data, googleSyncedAt: new Date() },
             });
             imported++;
+            await this.reminders.syncEventReminder(userId, updated);
           }
         } else {
-          await this.prisma.calendarEvent.create({
+          const created = await this.prisma.calendarEvent.create({
             data: {
               ownerId: userId,
               googleEventId: ev.id,
@@ -267,6 +273,7 @@ export class GoogleCalendarService {
             },
           });
           imported++;
+          await this.reminders.syncEventReminder(userId, created);
         }
       }
       nextSyncToken = page.nextSyncToken ?? nextSyncToken;
@@ -334,7 +341,58 @@ export class GoogleCalendarService {
         lastSyncDirection: 'bidirectional',
       },
     });
+    try {
+      await this.syncHolidays(userId, accessToken);
+    } catch (e) {
+      this.logger.warn(`sync de feriados falhou: ${e}`);
+    }
     return { imported, deleted, pushed };
+  }
+
+  /**
+   * Importa todos os feriados nacionais do Brasil (agenda oficial do Google,
+   * somente leitura): janela de 30 dias atrás até 18 meses à frente.
+   */
+  private async syncHolidays(userId: string, accessToken: string) {
+    const params = new URLSearchParams({
+      maxResults: '250',
+      singleEvents: 'true',
+      orderBy: 'startTime',
+      timeMin: new Date(Date.now() - 30 * 86_400_000).toISOString(),
+      timeMax: new Date(Date.now() + 548 * 86_400_000).toISOString(),
+    });
+    const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
+      GOOGLE_HOLIDAY_CALENDAR_ID,
+    )}/events?${params.toString()}`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) {
+      throw new Error(`feriados: ${await res.text()}`);
+    }
+    const page = (await res.json()) as { items?: GoogleEvent[] };
+    for (const ev of page.items ?? []) {
+      if (ev.status === 'cancelled') continue;
+      const data = this.mapGoogleEvent(ev);
+      await this.prisma.calendarEvent.upsert({
+        where: {
+          ownerId_googleEventId: { ownerId: userId, googleEventId: ev.id },
+        },
+        create: {
+          ownerId: userId,
+          googleEventId: ev.id,
+          source: 'GOOGLE',
+          isHoliday: true,
+          ...data,
+          googleSyncedAt: new Date(),
+        },
+        update: {
+          isHoliday: true,
+          ...data,
+          googleSyncedAt: new Date(),
+        },
+      });
+    }
   }
 
   private async syncUserFull(userId: string) {

@@ -80,6 +80,7 @@ model User {
   name         String
   passwordHash String?  @map("password_hash") // null em contas criadas via OAuth
   avatarUrl    String?  @map("avatar_url")    // foto do provedor social (Google)
+  eventReminderMinutes Int? @map("event_reminder_minutes") // lembrete automático antes de compromissos: null = padrão 60, 0 = desativado
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
@@ -369,6 +370,7 @@ model CalendarEvent {
   endsAt         DateTime?           @map("ends_at")
   allDay         Boolean             @default(false) @map("all_day")
   source         CalendarEventSource @default(APP)
+  isHoliday      Boolean             @default(false) @map("is_holiday") // importado da agenda de feriados do Google (somente leitura)
   googleEventId  String?             @map("google_event_id")
   googleSyncedAt DateTime?           @map("google_synced_at")
   createdAt      DateTime            @default(now()) @map("created_at")

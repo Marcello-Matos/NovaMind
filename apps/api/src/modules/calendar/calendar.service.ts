@@ -1,7 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OrganizationsService } from '../organizations/organizations.service';
+import { RemindersService } from '../reminders/reminders.service';
 import {
   CreateCalendarEventDto,
   UpdateCalendarEventDto,
@@ -12,6 +17,7 @@ export class CalendarService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly organizations: OrganizationsService,
+    private readonly reminders: RemindersService,
   ) {}
 
   async create(
@@ -22,7 +28,7 @@ export class CalendarService {
     if (dto.organizationId) {
       await this.organizations.assertMembership(userId, dto.organizationId);
     }
-    return this.prisma.calendarEvent.create({
+    const event = await this.prisma.calendarEvent.create({
       data: {
         ownerId: userId,
         organizationId: dto.organizationId ?? null,
@@ -35,6 +41,8 @@ export class CalendarService {
         source,
       },
     });
+    await this.reminders.syncEventReminder(userId, event);
+    return event;
   }
 
   list(userId: string, from: Date, to: Date, organizationId?: string) {
@@ -54,7 +62,7 @@ export class CalendarService {
 
   async update(userId: string, eventId: string, dto: UpdateCalendarEventDto) {
     await this.findOwned(userId, eventId);
-    return this.prisma.calendarEvent.update({
+    const event = await this.prisma.calendarEvent.update({
       where: { id: eventId },
       data: {
         title: dto.title,
@@ -65,11 +73,19 @@ export class CalendarService {
         allDay: dto.allDay,
       },
     });
+    await this.reminders.syncEventReminder(userId, event);
+    return event;
   }
 
   async remove(userId: string, eventId: string) {
-    await this.findOwned(userId, eventId);
+    const event = await this.findOwned(userId, eventId);
+    if (event.isHoliday) {
+      throw new BadRequestException('Feriados são somente leitura');
+    }
     await this.prisma.calendarEvent.delete({ where: { id: eventId } });
+    await this.prisma.reminder.deleteMany({
+      where: { ownerId: userId, eventId, source: 'event' },
+    });
     return { deleted: true };
   }
 

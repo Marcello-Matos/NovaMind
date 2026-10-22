@@ -102,6 +102,21 @@ class AuthController extends ChangeNotifier {
     }
   }
 
+  /// Salva o lembrete automático antes de compromissos (minutos; 0 = off).
+  /// Retorna mensagem de erro ou null em caso de sucesso.
+  Future<String?> updateEventReminderMinutes(int? minutes) async {
+    try {
+      user = await api.updateMe(
+        eventReminderMinutes: minutes,
+        clearEventReminder: minutes == null,
+      );
+      notifyListeners();
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    }
+  }
+
   Future<void> logout() async {
     await _clearSession();
     user = null;

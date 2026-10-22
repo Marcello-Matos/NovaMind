@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../models/models.dart';
 import '../../services/api_client.dart';
 import '../../services/novamind_api.dart';
+import '../../services/reminder_notifications.dart';
 import '../../state/auth_controller.dart';
 
 /// Agenda de compromissos: calendário mensal + lista do dia + lembretes.
@@ -111,6 +112,8 @@ class _AgendaScreenState extends State<AgendaScreen> {
           '${res['pushed'] ?? 0} enviados ao Google',
         ),
       ));
+      // Novos compromissos podem ter gerado lembretes: reagenda as notificações.
+      ReminderNotificationService(api: api).syncReminders();
       await _load();
     } on ApiException catch (e) {
       if (mounted) {
@@ -119,6 +122,66 @@ class _AgendaScreenState extends State<AgendaScreen> {
       }
     } finally {
       if (mounted) setState(() => _googleSyncing = false);
+    }
+  }
+
+  String _reminderLabel(BuildContext context) {
+    final minutes =
+        context.read<AuthController>().user?.eventReminderMinutes ?? 60;
+    if (minutes <= 0) return 'desativado';
+    if (minutes < 60) return '$minutes min antes';
+    if (minutes == 60) return '1 hora antes';
+    if (minutes == 1440) return '1 dia antes';
+    return '${minutes ~/ 60} horas antes';
+  }
+
+  Future<void> _pickReminderLead() async {
+    final auth = context.read<AuthController>();
+    final current = auth.user?.eventReminderMinutes ?? 60;
+    const options = <(int?, String)>[
+      (null, '1 hora antes (padrão)'),
+      (0, 'Desativado'),
+      (15, '15 minutos antes'),
+      (30, '30 minutos antes'),
+      (60, '1 hora antes'),
+      (1440, '1 dia antes'),
+    ];
+    final picked = await showModalBottomSheet<int>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Lembrete automático de compromissos',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            ...options.map(
+              (o) => ListTile(
+                title: Text(o.$2),
+                trailing: (o.$1 ?? 60) == current
+                    ? const Icon(Icons.check)
+                    : null,
+                onTap: () => Navigator.pop(sheetContext, o.$1),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    final err = await auth.updateEventReminderMinutes(picked);
+    if (err != null && mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(err)));
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Lembrete: ${_reminderLabel(context)}')),
+      );
     }
   }
 
@@ -211,6 +274,8 @@ class _AgendaScreenState extends State<AgendaScreen> {
         startsAt: start,
         organizationId: orgId,
       );
+      // A API cria o lembrete automático; reagenda as notificações locais.
+      ReminderNotificationService(api: api).syncReminders();
       await _load();
     } on ApiException catch (e) {
       if (mounted) {
@@ -297,24 +362,32 @@ class _AgendaScreenState extends State<AgendaScreen> {
                       ...dayEvents.map(
                         (e) => ListTile(
                           leading: Icon(
-                            e.source == 'GOOGLE'
-                                ? Icons.sync
-                                : Icons.event_outlined,
-                            color: theme.colorScheme.primary,
+                            e.isHoliday
+                                ? Icons.celebration_outlined
+                                : e.source == 'GOOGLE'
+                                    ? Icons.sync
+                                    : Icons.event_outlined,
+                            color: e.isHoliday
+                                ? theme.colorScheme.tertiary
+                                : theme.colorScheme.primary,
                           ),
                           title: Text(e.title),
                           subtitle: Text(
-                            '${_fmtTime(e.startsAt)}'
-                            '${e.endsAt != null ? ' – ${_fmtTime(e.endsAt!)}' : ''}'
-                            '${e.location != null ? ' · ${e.location}' : ''}',
+                            e.isHoliday
+                                ? 'Feriado nacional'
+                                : '${_fmtTime(e.startsAt)}'
+                                    '${e.endsAt != null ? ' – ${_fmtTime(e.endsAt!)}' : ''}'
+                                    '${e.location != null ? ' · ${e.location}' : ''}',
                           ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () async {
-                              await api.deleteEvent(e.id);
-                              _load();
-                            },
-                          ),
+                          trailing: e.isHoliday
+                              ? null
+                              : IconButton(
+                                  icon: const Icon(Icons.delete_outline),
+                                  onPressed: () async {
+                                    await api.deleteEvent(e.id);
+                                    _load();
+                                  },
+                                ),
                         ),
                       ),
                     const Padding(
@@ -323,6 +396,18 @@ class _AgendaScreenState extends State<AgendaScreen> {
                         'Lembretes',
                         style: TextStyle(fontWeight: FontWeight.w700),
                       ),
+                    ),
+                    ListTile(
+                      leading: Icon(
+                        Icons.alarm_add_outlined,
+                        color: theme.colorScheme.primary,
+                      ),
+                      title: const Text('Lembrete automático'),
+                      subtitle: Text(
+                        'Antes de cada compromisso: ${_reminderLabel(context)}',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: _pickReminderLead,
                     ),
                     if (_reminders.isEmpty)
                       const Padding(

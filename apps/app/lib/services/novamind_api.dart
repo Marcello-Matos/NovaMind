@@ -29,16 +29,21 @@ class NovaMindApi {
 
   /// Atualiza o perfil. `avatarDataUrl` salva a foto (data URL JPEG
   /// processado); `removeAvatar: true` limpa a foto; omita ambos para
-  /// alterar apenas o nome.
+  /// alterar apenas o nome. `eventReminderMinutes`: lembrete automático
+  /// antes de compromissos (0 = desativado, null = padrão de 60).
   Future<User> updateMe({
     String? name,
     String? avatarDataUrl,
     bool removeAvatar = false,
+    int? eventReminderMinutes,
+    bool clearEventReminder = false,
   }) async {
     final body = <String, Object?>{
       'name': ?name,
       if (removeAvatar) 'avatarUrl': null,
       'avatarUrl': ?avatarDataUrl,
+      if (clearEventReminder) 'eventReminderMinutes': null,
+      'eventReminderMinutes': ?eventReminderMinutes,
     };
     return User.fromJson(await client.patch('/auth/me', body));
   }

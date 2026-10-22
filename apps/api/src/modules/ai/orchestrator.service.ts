@@ -218,10 +218,9 @@ export class OrchestratorService {
     const proactive =
       agent === AgentType.PERSONAL || !organizationId
         ? '\n\nComportamento proativo (essencial):\n' +
-          '- Compromissos: proponha via create_calendar_event e, depois que o ' +
-          'usuário confirmar, ofereça lembrete antecipado ("Quer que eu te ' +
-          'lembre 1 hora antes?"). Se aceitar, crie com create_reminder ' +
-          '60min antes do início.\n' +
+          '- Compromissos: proponha via create_calendar_event. Todo compromisso ' +
+          'ganha lembrete automático (1h antes, configurável) — NÃO use ' +
+          'create_reminder para isso nem ofereça lembrete de compromissos.\n' +
           '- Obrigações com prazo ("pagar a conta até sexta"): crie lembrete ' +
           'no fim da tarde do dia anterior (ex.: quinta às 18h) sem ' +
           'perguntar — apenas informe que criou e para quando.\n' +
