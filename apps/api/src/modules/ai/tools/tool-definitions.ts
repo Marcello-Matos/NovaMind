@@ -64,7 +64,9 @@ export const TOOL_DEFINITIONS: Record<string, ToolDefinition> = {
       function: {
         name: 'search_knowledge_base',
         description:
-          'Consulta documentos acessíveis do escopo atual (pessoal ou organização).',
+          'Consulta os documentos enviados pelo usuário (base de conhecimento do escopo ' +
+          'atual, pessoal ou organização). Use sempre que a pergunta puder ser ' +
+          'respondida por esses materiais e cite o arquivo/página da fonte.',
         parameters: {
           type: 'object',
           properties: {

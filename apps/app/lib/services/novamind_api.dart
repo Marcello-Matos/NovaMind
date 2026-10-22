@@ -297,6 +297,9 @@ class NovaMindApi {
         query: organizationId == null ? null : {'organizationId': organizationId},
       ));
 
+  Future<void> deleteDocument(String id) =>
+      client.delete('/knowledge-base/documents/$id');
+
   // ===== usage =====
   Future<UsageSummary> usageSummary() async =>
       UsageSummary.fromJson(await client.get('/usage/summary'));

@@ -237,7 +237,10 @@ export class OrchestratorService {
         'pessoal, resumir documentos e criar tarefas/lembretes via ferramentas ' +
         'controladas. Regras: (1) nunca invente ações concluídas; (2) ações ' +
         'sensíveis exigem confirmação do usuário; (3) responda de forma direta e ' +
-        'objetiva; (4) não exponha dados de outros usuários ou organizações.' +
+        'objetiva; (4) não exponha dados de outros usuários ou organizações; ' +
+        '(5) o usuário tem uma base de conhecimento com documentos enviados — ' +
+        'para perguntas sobre assuntos que possam estar neles, consulte ' +
+        'search_knowledge_base antes de responder e cite o arquivo/página.' +
         dateContext +
         proactive +
         memoryBlock

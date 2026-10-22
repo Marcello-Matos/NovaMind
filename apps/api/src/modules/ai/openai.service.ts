@@ -18,12 +18,18 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'gpt-4o': { input: 2.5, output: 10.0 },
   'gemini-2.0-flash': { input: 0.1, output: 0.4 },
   'gemini-2.5-flash': { input: 0.3, output: 2.5 },
+  'text-embedding-3-small': { input: 0.02, output: 0 },
+  'text-embedding-3-large': { input: 0.13, output: 0 },
 };
+
+/** Dimensão da coluna document_chunks.embedding (vector(1536)). */
+export const EMBEDDING_DIMENSIONS = 1536;
 
 @Injectable()
 export class OpenAiService {
   private client: OpenAI | null = null;
   readonly chatModel: string;
+  readonly embeddingModel: string;
 
   constructor(private readonly config: ConfigService) {
     const apiKey = config.get<string>('OPENAI_API_KEY');
@@ -37,6 +43,35 @@ export class OpenAiService {
       });
     }
     this.chatModel = config.get<string>('OPENAI_CHAT_MODEL', 'gpt-4o-mini');
+    this.embeddingModel = config.get<string>(
+      'OPENAI_EMBEDDING_MODEL',
+      'text-embedding-3-small',
+    );
+  }
+
+  /**
+   * Gera embeddings com a dimensão da coluna pgvector. Lança erro se o
+   * provedor não estiver configurado ou não suportar o modelo/dimensão —
+   * quem chama decide o fallback (busca por palavra-chave).
+   */
+  async embed(texts: string[]): Promise<{ vectors: number[][]; tokens: number }> {
+    if (!this.client) {
+      throw new ServiceUnavailableException('OPENAI_API_KEY não configurada');
+    }
+    const res = await this.client.embeddings.create({
+      model: this.embeddingModel,
+      input: texts,
+      dimensions: EMBEDDING_DIMENSIONS,
+    });
+    const vectors = [...res.data]
+      .sort((a, b) => a.index - b.index)
+      .map((d) => d.embedding);
+    if (vectors.some((v) => v.length !== EMBEDDING_DIMENSIONS)) {
+      throw new Error(
+        `Modelo ${this.embeddingModel} retornou dimensão diferente de ${EMBEDDING_DIMENSIONS}`,
+      );
+    }
+    return { vectors, tokens: res.usage?.prompt_tokens ?? 0 };
   }
 
   get isConfigured(): boolean {

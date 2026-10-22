@@ -171,7 +171,9 @@ class KnowledgeDocument {
   final String fileName;
   final String mimeType;
   final int sizeBytes;
-  final String status;
+  final String status; // PENDING | PROCESSING | READY | FAILED
+  final String? error;
+  final int? chunks; // trechos indexados (quando READY)
 
   KnowledgeDocument({
     required this.id,
@@ -179,7 +181,11 @@ class KnowledgeDocument {
     required this.mimeType,
     required this.sizeBytes,
     required this.status,
+    this.error,
+    this.chunks,
   });
+
+  bool get isProcessing => status == 'PROCESSING' || status == 'PENDING';
 
   factory KnowledgeDocument.fromJson(Map<String, dynamic> json) =>
       KnowledgeDocument(
@@ -188,6 +194,8 @@ class KnowledgeDocument {
         mimeType: json['mimeType'] as String,
         sizeBytes: json['sizeBytes'] as int,
         status: json['status'] as String,
+        error: json['error'] as String?,
+        chunks: (json['metadata'] as Map<String, dynamic>?)?['chunks'] as int?,
       );
 }
 

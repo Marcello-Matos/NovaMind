@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.module';
+import { OpenAiService } from '../openai.service';
 import { TOOL_DEFINITIONS } from './tool-definitions';
 
 export interface ToolContext {
@@ -29,7 +31,81 @@ export class ToolExecutorService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly openai: OpenAiService,
   ) {}
+
+  /**
+   * Busca híbrida na base de conhecimento do escopo (pessoal ou empresa):
+   * semântica via pgvector quando há embeddings; senão, palavras-chave
+   * ranqueadas pela quantidade de termos encontrados.
+   */
+  private async searchKnowledge(ctx: ToolContext, query: string) {
+    const scope = ctx.organizationId
+      ? Prisma.sql`d.organization_id = ${ctx.organizationId}`
+      : Prisma.sql`d.user_id = ${ctx.userId} AND d.organization_id IS NULL`;
+    const format = (rows: Array<{ content: string; fileName: string; source: unknown }>) => ({
+      matches: rows.map((r) => {
+        const page = (r.source as { page?: number } | null)?.page;
+        const file = (r.source as { file?: string } | null)?.file ?? r.fileName;
+        return {
+          source: page ? `${file} (página ${page})` : file,
+          excerpt: r.content.slice(0, 1200),
+        };
+      }),
+    });
+
+    if (this.openai.isConfigured && query.trim()) {
+      try {
+        const { vectors } = await this.openai.embed([query]);
+        const vector = `[${vectors[0].join(',')}]`;
+        const rows = await this.prisma.$queryRaw<
+          Array<{ content: string; fileName: string; source: unknown }>
+        >`
+          SELECT c.content, d.file_name AS "fileName", c.source
+          FROM document_chunks c
+          JOIN knowledge_documents d ON d.id = c.document_id
+          WHERE c.embedding IS NOT NULL AND d.status = 'READY' AND ${scope}
+          ORDER BY c.embedding <=> ${vector}::vector
+          LIMIT 6`;
+        if (rows.length) return format(rows);
+      } catch (err) {
+        this.logger.warn(`Busca semântica indisponível, usando palavras-chave: ${err}`);
+      }
+    }
+
+    const terms = [
+      ...new Set(
+        query
+          .toLowerCase()
+          .split(/[^\p{L}\p{N}]+/u)
+          .filter((t) => t.length >= 3),
+      ),
+    ].slice(0, 8);
+    if (!terms.length) return { matches: [] };
+    const candidates = await this.prisma.documentChunk.findMany({
+      where: {
+        OR: terms.map((t) => ({ content: { contains: t, mode: 'insensitive' as const } })),
+        document: {
+          status: 'READY',
+          ...(ctx.organizationId
+            ? { organizationId: ctx.organizationId }
+            : { userId: ctx.userId, organizationId: null }),
+        },
+      },
+      take: 60,
+      select: { content: true, source: true, document: { select: { fileName: true } } },
+    });
+    const ranked = candidates
+      .map((c) => ({
+        content: c.content,
+        source: c.source,
+        fileName: c.document.fileName,
+        score: terms.filter((t) => c.content.toLowerCase().includes(t)).length,
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6);
+    return format(ranked);
+  }
 
   async execute(
     name: string,
@@ -120,29 +196,8 @@ export class ToolExecutorService {
           },
         });
 
-      case 'search_knowledge_base': {
-        // Busca textual simples até o pipeline de embeddings entrar em produção.
-        const query = String(args.query ?? '');
-        const chunks = await this.prisma.documentChunk.findMany({
-          where: {
-            content: { contains: query, mode: 'insensitive' },
-            document: ctx.organizationId
-              ? { organizationId: ctx.organizationId }
-              : { userId: ctx.userId, organizationId: null },
-          },
-          take: 5,
-          select: {
-            content: true,
-            document: { select: { fileName: true } },
-          },
-        });
-        return {
-          matches: chunks.map((c) => ({
-            source: c.document.fileName,
-            excerpt: c.content.slice(0, 500),
-          })),
-        };
-      }
+      case 'search_knowledge_base':
+        return this.searchKnowledge(ctx, String(args.query ?? ''));
 
       case 'create_calendar_event':
         return this.prisma.calendarEvent.create({
