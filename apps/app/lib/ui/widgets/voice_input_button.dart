@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_recognition_error.dart';
@@ -46,11 +47,27 @@ class VoiceInputButtonState extends State<VoiceInputButton> {
   String? _localeId;
   String _text = '';
   Completer<void>? _finalResult;
+  // Energia para o orb: nível real do mic (quando o SO reporta) somado à
+  // atividade de fala — no iOS o nível não chega, mas resultados parciais
+  // chegam a cada trecho falado e é isso que faz o orb reagir.
+  double _micLevel = 0;
+  double _speechActivity = 0;
+  Timer? _activityDecay;
+
+  void _emitLevel() {
+    widget.onLevelChanged?.call(math.max(_micLevel, _speechActivity));
+  }
 
   void _setListening(bool value) {
     _listening = value;
     widget.onListeningChanged?.call(value);
-    if (!value) widget.onLevelChanged?.call(0);
+    if (!value) {
+      _micLevel = 0;
+      _speechActivity = 0;
+      _activityDecay?.cancel();
+      _activityDecay = null;
+      widget.onLevelChanged?.call(0);
+    }
   }
 
   /// Interrompe a escuta descartando o texto (ex.: usuário tocou em Enviar).
@@ -134,6 +151,15 @@ class VoiceInputButtonState extends State<VoiceInputButton> {
     if (!_accepting) return;
     _text = result.recognizedWords;
     widget.onPartial(_text);
+    // Cada trecho reconhecido = voz ativa; decai ~450ms após a última
+    // atualização para acompanhar pausas naturais da fala.
+    _speechActivity = 0.75;
+    _activityDecay?.cancel();
+    _activityDecay = Timer(const Duration(milliseconds: 450), () {
+      _speechActivity = 0;
+      _emitLevel();
+    });
+    _emitLevel();
     if (result.finalResult && _finalResult?.isCompleted == false) {
       _finalResult?.complete();
     }
@@ -148,9 +174,12 @@ class VoiceInputButtonState extends State<VoiceInputButton> {
     setState(() => _setListening(true));
     await _speech.listen(
       onResult: _onResult,
-      // dB do microfone (~-2..10) normalizado para o orb: 0..1.
-      onSoundLevelChange: (level) => widget.onLevelChanged
-          ?.call(((level + 2) / 12).clamp(0.0, 1.0)),
+      // dB do microfone (~-2..10) normalizado; em plataformas que não
+      // reportam (iOS) a atividade de fala cobre a animação.
+      onSoundLevelChange: (level) {
+        _micLevel = ((level + 2) / 12).clamp(0.0, 1.0);
+        _emitLevel();
+      },
       listenOptions: SpeechListenOptions(
         localeId: _localeId,
         listenFor: const Duration(minutes: 1),
