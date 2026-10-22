@@ -336,6 +336,26 @@ class _AgendaScreenState extends State<AgendaScreen> {
                       eventLoader: (d) => _events
                           .where((e) => _sameDay(_eventDay(e), d))
                           .toList(),
+                      calendarBuilders: CalendarBuilders(
+                        markerBuilder: (context, day, events) {
+                          if (events.isEmpty) return null;
+                          final items = events.cast<CalendarEventItem>();
+                          final hasHoliday = items.any((e) => e.isHoliday);
+                          final hasEvent = items.any((e) => !e.isHoliday);
+                          return Row(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              if (hasHoliday)
+                                _markerDot(theme.colorScheme.error),
+                              if (hasHoliday && hasEvent)
+                                const SizedBox(width: 3),
+                              if (hasEvent)
+                                _markerDot(theme.colorScheme.primary),
+                            ],
+                          );
+                        },
+                      ),
                       headerStyle: const HeaderStyle(
                         formatButtonVisible: false,
                         titleCentered: true,
@@ -528,6 +548,12 @@ class _AgendaScreenState extends State<AgendaScreen> {
   /// como meia-noite UTC e, no fuso -03:00, cairiam no dia anterior.
   DateTime _eventDay(CalendarEventItem e) =>
       e.allDay ? e.startsAt.toUtc() : e.startsAt;
+
+  Widget _markerDot(Color color) => Container(
+        width: 6,
+        height: 6,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      );
 
   String _fmtReminder(ReminderItem r) {
     final local = r.remindAt.toLocal();

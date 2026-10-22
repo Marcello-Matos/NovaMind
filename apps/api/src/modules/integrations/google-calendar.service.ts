@@ -20,7 +20,10 @@ const GOOGLE_EVENTS_URL =
 // Agenda oficial de feriados nacionais do Brasil (somente leitura).
 const GOOGLE_HOLIDAY_CALENDAR_ID =
   'pt_brazilian#holiday@group.v.calendar.google.com';
-const SCOPES = ['https://www.googleapis.com/auth/calendar.events'];
+const SCOPES = [
+  'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/calendar.readonly', // leitura da agenda de feriados e outras agendas
+];
 
 /**
  * Sincronização bidirecional com o Google Calendar.
