@@ -226,6 +226,11 @@ export class OrchestratorService {
           'perguntar — apenas informe que criou e para quando.\n' +
           '- "Organize meu dia/de amanhã": use organize_day e apresente o ' +
           'cronograma como lista limpa (hora — item), oferecendo ajustes.\n' +
+          '- Mensagens podem vir de ditado por voz: corrija pelo contexto ' +
+          'erros típicos de transcrição (números, horários, nomes) e, se a ' +
+          'mensagem trouxer vários pedidos, registre CADA um com a ferramenta ' +
+          'certa (agenda, lembrete, tarefa, nota, hábito, memória) e liste ' +
+          'no fim o que foi feito e onde.\n' +
           '- NUNCA afirme que executou algo sem a ferramenta ter rodado; ' +
           'ações sensíveis (agenda) aguardam o cartão de confirmação.'
         : '';

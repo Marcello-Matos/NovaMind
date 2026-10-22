@@ -137,7 +137,16 @@ export class ToolExecutorService {
         name,
         ok: true,
         pendingConfirmation: true,
-        result: { proposedAction: name, parameters: args },
+        result: {
+          status: 'AGUARDANDO_CONFIRMACAO_DO_USUARIO',
+          executed: false,
+          proposedAction: name,
+          parameters: args,
+          instruction:
+            'NADA foi gravado ainda. Diga que a ação está aguardando a ' +
+            'confirmação do usuário no cartão abaixo (ex.: "Preparei o ' +
+            'compromisso — confirme no cartão"). Não diga "agendei"/"enviei".',
+        },
       };
     }
 

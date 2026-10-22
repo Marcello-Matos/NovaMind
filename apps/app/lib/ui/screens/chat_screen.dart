@@ -5,6 +5,7 @@ import '../../models/models.dart';
 import '../../services/api_client.dart';
 import '../../services/novamind_api.dart';
 import '../../state/auth_controller.dart';
+import '../widgets/voice_input_button.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -408,7 +409,19 @@ class _ChatScreenState extends State<ChatScreen> {
                   onSubmitted: (_) => _send(),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
+              VoiceInputButton(
+                enabled: !_sending,
+                onPartial: (text) => _input.value = TextEditingValue(
+                  text: text,
+                  selection: TextSelection.collapsed(offset: text.length),
+                ),
+                onFinished: (text) {
+                  _input.clear();
+                  _submit(content: text);
+                },
+              ),
+              const SizedBox(width: 4),
               FilledButton(
                 onPressed: _sending ? null : _send,
                 child: const Text('Enviar'),
