@@ -165,6 +165,26 @@ export class ToolExecutorService {
     }
   }
 
+  /**
+   * Converte ISO do modelo em instante. O prompt pede offset -03:00, mas
+   * quando ele omite, new Date() interpretaria como horário do servidor
+   * (UTC no Render) — um "07:00" viraria 4h da manhã no app. Sem offset,
+   * assume horário de Brasília, que é o que o usuário quis dizer.
+   */
+  private parseBrDateTime(value: unknown): Date | undefined {
+    if (value == null) return undefined;
+    const s = String(value).trim();
+    if (!s) return undefined;
+    const hasZone = /(Z|[+-]\d{2}:?\d{2})$/i.test(s);
+    const normalized = hasZone
+      ? s
+      : /^\d{4}-\d{2}-\d{2}$/.test(s)
+        ? `${s}T00:00:00-03:00`
+        : `${s}-03:00`;
+    const d = new Date(normalized);
+    return Number.isNaN(d.getTime()) ? undefined : d;
+  }
+
   private async dispatch(
     name: string,
     args: Record<string, unknown>,
@@ -179,7 +199,7 @@ export class ToolExecutorService {
             title: String(args.title),
             description: args.description ? String(args.description) : undefined,
             priority: (args.priority as 'LOW' | 'MEDIUM' | 'HIGH') ?? 'MEDIUM',
-            dueAt: args.dueAt ? new Date(String(args.dueAt)) : undefined,
+            dueAt: args.dueAt ? this.parseBrDateTime(args.dueAt) : undefined,
           },
         });
 
@@ -208,7 +228,11 @@ export class ToolExecutorService {
       case 'search_knowledge_base':
         return this.searchKnowledge(ctx, String(args.query ?? ''));
 
-      case 'create_calendar_event':
+      case 'create_calendar_event': {
+        const startsAt = this.parseBrDateTime(args.startsAt);
+        if (!startsAt) {
+          return { error: 'startsAt inválido — use ISO 8601 com data e hora' };
+        }
         return this.prisma.calendarEvent.create({
           data: {
             ownerId: ctx.userId,
@@ -216,22 +240,28 @@ export class ToolExecutorService {
             title: String(args.title),
             description: args.description ? String(args.description) : undefined,
             location: args.location ? String(args.location) : undefined,
-            startsAt: new Date(String(args.startsAt)),
-            endsAt: args.endsAt ? new Date(String(args.endsAt)) : null,
+            startsAt,
+            endsAt: this.parseBrDateTime(args.endsAt) ?? null,
             source: 'AGENT',
           },
         });
+      }
 
-      case 'create_reminder':
+      case 'create_reminder': {
+        const remindAt = this.parseBrDateTime(args.remindAt);
+        if (!remindAt) {
+          return { error: 'remindAt inválido — use ISO 8601 com data e hora' };
+        }
         return this.prisma.reminder.create({
           data: {
             ownerId: ctx.userId,
             title: String(args.title),
-            remindAt: new Date(String(args.remindAt)),
+            remindAt,
             repeatRule: (args.repeatRule as 'NONE' | 'DAILY' | 'WEEKLY') ?? 'NONE',
             source: 'agent',
           },
         });
+      }
 
       case 'create_note':
         return this.prisma.note.create({

@@ -563,13 +563,17 @@ class _AgendaScreenState extends State<AgendaScreen>
     );
   }
 
-  String _fmtTime(DateTime d) =>
-      '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+  /// A API devolve instantes em UTC; exibe sempre no fuso do aparelho.
+  String _fmtTime(DateTime d) {
+    final l = d.toLocal();
+    return '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
+  }
 
   /// Dia do evento já convertido: eventos de dia inteiro (feriados) chegam
   /// como meia-noite UTC e, no fuso -03:00, cairiam no dia anterior.
+  /// Eventos com hora usam o dia local (ex.: 22h de sexta não vira sábado).
   DateTime _eventDay(CalendarEventItem e) =>
-      e.allDay ? e.startsAt.toUtc() : e.startsAt;
+      e.allDay ? e.startsAt.toUtc() : e.startsAt.toLocal();
 
   Widget _markerDot(Color color) => Container(
         width: 6,

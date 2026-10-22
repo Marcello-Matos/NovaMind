@@ -57,8 +57,10 @@ class NovaMindApi {
     String? organizationId,
   }) async {
     final q = <String, String>{
-      'from': ?from?.toIso8601String(),
-      'to': ?to?.toIso8601String(),
+      // toUtc: toIso8601String() de DateTime local sai sem sufixo e o
+      // servidor interpretaria como UTC — deslocando tudo em -3h.
+      'from': ?from?.toUtc().toIso8601String(),
+      'to': ?to?.toUtc().toIso8601String(),
       'organizationId': ?organizationId,
     };
     final res = await client.get('/calendar', q);
@@ -76,8 +78,8 @@ class NovaMindApi {
   }) async =>
       CalendarEventItem.fromJson(await client.post('/calendar', {
         'title': title,
-        'startsAt': startsAt.toIso8601String(),
-        'endsAt': ?endsAt,
+        'startsAt': startsAt.toUtc().toIso8601String(),
+        'endsAt': ?endsAt?.toUtc().toIso8601String(),
         'description': ?description,
         'location': ?location,
         'allDay': allDay,
@@ -140,7 +142,7 @@ class NovaMindApi {
   }) async =>
       ReminderItem.fromJson(await client.post('/reminders', {
         'title': title,
-        'remindAt': remindAt.toIso8601String(),
+        'remindAt': remindAt.toUtc().toIso8601String(),
         'repeatRule': repeatRule,
       }));
 
