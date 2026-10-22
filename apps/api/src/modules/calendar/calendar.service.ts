@@ -7,6 +7,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { OrganizationsService } from '../organizations/organizations.service';
 import { RemindersService } from '../reminders/reminders.service';
+import { brazilHolidaysBetween } from './brazil-holidays';
 import {
   CreateCalendarEventDto,
   UpdateCalendarEventDto,
@@ -45,7 +46,12 @@ export class CalendarService {
     return event;
   }
 
-  list(userId: string, from: Date, to: Date, organizationId?: string) {
+  /**
+   * Compromissos do intervalo + feriados nacionais calculados localmente.
+   * Os feriados entram em qualquer modo (pessoal ou empresarial) e não
+   * duplicam os já importados da agenda de feriados do Google.
+   */
+  async list(userId: string, from: Date, to: Date, organizationId?: string) {
     const where: Prisma.CalendarEventWhereInput = {
       startsAt: { gte: from, lt: to },
       OR: [
@@ -54,10 +60,42 @@ export class CalendarService {
       ],
     };
     if (organizationId) where.organizationId = organizationId;
-    return this.prisma.calendarEvent.findMany({
+    const events = await this.prisma.calendarEvent.findMany({
       where,
       orderBy: { startsAt: 'asc' },
     });
+
+    const importedHolidayDays = new Set(
+      events
+        .filter((e) => e.isHoliday)
+        .map((e) => e.startsAt.toISOString().slice(0, 10)),
+    );
+    const holidays = brazilHolidaysBetween(from, to)
+      .filter((h) => !importedHolidayDays.has(h.date))
+      .map((h) => {
+        const startsAt = new Date(`${h.date}T00:00:00.000Z`);
+        return {
+          id: `holiday-${h.date}`,
+          ownerId: userId,
+          organizationId: null,
+          title: h.name,
+          description: null,
+          location: null,
+          startsAt,
+          endsAt: new Date(startsAt.getTime() + 86_400_000),
+          allDay: true,
+          source: 'APP' as const,
+          isHoliday: true,
+          googleEventId: null,
+          googleSyncedAt: null,
+          createdAt: startsAt,
+          updatedAt: startsAt,
+        };
+      });
+
+    return [...events, ...holidays].sort(
+      (a, b) => a.startsAt.getTime() - b.startsAt.getTime(),
+    );
   }
 
   async update(userId: string, eventId: string, dto: UpdateCalendarEventDto) {
