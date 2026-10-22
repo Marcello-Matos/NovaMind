@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   Delete,
   Get,
@@ -9,13 +10,16 @@ import {
   NotFoundException,
   OnModuleInit,
   Param,
+  Patch,
   Post,
+  Put,
   Query,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -63,11 +67,9 @@ export class KnowledgeBaseService implements OnModuleInit {
     if (count) this.logger.warn(`${count} documento(s) marcados para reenvio`);
   }
 
-  async registerDocument(
-    userId: string,
+  private assertValidFile(
     file: Express.Multer.File | undefined,
-    organizationId?: string,
-  ) {
+  ): asserts file is Express.Multer.File {
     if (!file?.buffer?.length) {
       throw new BadRequestException('Envie um arquivo no campo "file"');
     }
@@ -76,6 +78,14 @@ export class KnowledgeBaseService implements OnModuleInit {
         'Formato não suportado. Use PDF, DOCX, TXT, MD, CSV, JSON, HTML ou um .zip com esses arquivos.',
       );
     }
+  }
+
+  async registerDocument(
+    userId: string,
+    file: Express.Multer.File | undefined,
+    organizationId?: string,
+  ) {
+    this.assertValidFile(file);
     if (organizationId) {
       await this.organizations.assertMembership(userId, organizationId);
     }
@@ -110,20 +120,98 @@ export class KnowledgeBaseService implements OnModuleInit {
     });
   }
 
+  /** Detalhes + texto indexado (paginado) para conferência pelo usuário. */
+  async get(userId: string, id: string, offset = 0, limit = 20) {
+    const doc = await this.findAccessible(userId, id);
+    const [chunkCount, chunks] = await Promise.all([
+      this.prisma.documentChunk.count({ where: { documentId: id } }),
+      this.prisma.documentChunk.findMany({
+        where: { documentId: id },
+        orderBy: { chunkIndex: 'asc' },
+        skip: Math.max(0, offset),
+        take: Math.min(Math.max(1, limit), 50),
+        select: { chunkIndex: true, content: true, source: true },
+      }),
+    ]);
+    return { ...doc, chunkCount, chunks };
+  }
+
+  /**
+   * Renomeia mantendo a extensão original e atualiza a fonte citada pela
+   * IA nos trechos (inclusive "arquivo.zip/pasta/x.md" → novo prefixo).
+   */
+  async rename(userId: string, id: string, rawName: string) {
+    const doc = await this.findAccessible(userId, id);
+    const ext = extensionOf(doc.fileName);
+    let fileName = rawName.trim().replace(/[\\/]/g, '-');
+    if (!fileName) throw new BadRequestException('Informe um nome');
+    if (ext && extensionOf(fileName) !== ext) fileName = `${fileName}.${ext}`;
+    if (fileName === doc.fileName) return doc;
+
+    await this.prisma.$executeRaw`
+      UPDATE document_chunks
+      SET source = jsonb_set(
+        source::jsonb, '{file}',
+        to_jsonb(${fileName}::text || substr(source->>'file', ${doc.fileName.length + 1}::int))
+      )
+      WHERE document_id = ${id}
+        AND left(source->>'file', ${doc.fileName.length}::int) = ${doc.fileName}`;
+    return this.prisma.knowledgeDocument.update({
+      where: { id },
+      data: { fileName },
+    });
+  }
+
+  /** Troca o conteúdo do documento e reindexa (mantém o mesmo registro). */
+  async replace(userId: string, id: string, file: Express.Multer.File | undefined) {
+    this.assertValidFile(file);
+    const current = await this.findAccessible(userId, id);
+    if (current.status === 'PROCESSING') {
+      throw new BadRequestException(
+        'Aguarde o processamento atual terminar antes de substituir o arquivo',
+      );
+    }
+    const doc = await this.prisma.knowledgeDocument.update({
+      where: { id },
+      data: {
+        fileName: file.originalname,
+        mimeType: mimeTypeFor(file.originalname, file.mimetype),
+        sizeBytes: file.size,
+        status: 'PROCESSING',
+        error: null,
+        metadata: undefined,
+      },
+    });
+    void this.processor.process(doc.id, file.buffer);
+    return doc;
+  }
+
   async remove(userId: string, id: string) {
+    await this.findAccessible(userId, id);
+    await this.prisma.knowledgeDocument.delete({ where: { id } });
+    return { deleted: true };
+  }
+
+  private async findAccessible(userId: string, id: string) {
     const doc = await this.prisma.knowledgeDocument.findFirst({
       where: {
         id,
         OR: [
-          { userId },
+          { userId, organizationId: null },
           { organization: { members: { some: { userId } } } },
         ],
       },
     });
     if (!doc) throw new NotFoundException('Documento não encontrado');
-    await this.prisma.knowledgeDocument.delete({ where: { id } });
-    return { deleted: true };
+    return doc;
   }
+}
+
+class RenameDocumentDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  fileName!: string;
 }
 
 @Controller('knowledge-base')
@@ -147,6 +235,35 @@ export class KnowledgeBaseController {
     @Query('organizationId') organizationId?: string,
   ) {
     return this.kb.list(user.id, organizationId);
+  }
+
+  @Get('documents/:id')
+  get(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Query('offset') offset?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.kb.get(user.id, id, Number(offset) || 0, Number(limit) || 20);
+  }
+
+  @Patch('documents/:id')
+  rename(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: RenameDocumentDto,
+  ) {
+    return this.kb.rename(user.id, id, dto.fileName);
+  }
+
+  @Put('documents/:id/file')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_UPLOAD_BYTES } }))
+  replace(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.kb.replace(user.id, id, file);
   }
 
   @Delete('documents/:id')

@@ -7,6 +7,8 @@ import 'package:provider/provider.dart';
 import '../../models/models.dart';
 import '../../services/api_client.dart';
 import '../../state/auth_controller.dart';
+import '../widgets/document_actions.dart';
+import 'document_detail_screen.dart';
 
 class DocumentsScreen extends StatefulWidget {
   const DocumentsScreen({super.key});
@@ -73,33 +75,24 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     }
   }
 
-  Future<void> _delete(KnowledgeDocument d) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Excluir documento'),
-        content: Text(
-          'Excluir "${d.fileName}"? O assistente deixará de usar este conteúdo.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Excluir'),
-          ),
-        ],
+  Future<void> _openDetail(KnowledgeDocument d) async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => DocumentDetailScreen(documentId: d.id),
       ),
     );
-    if (ok != true || !mounted) return;
-    try {
-      await context.read<AuthController>().api.deleteDocument(d.id);
-      _reload();
-    } on ApiException catch (e) {
-      if (mounted) setState(() => _error = e.message);
-    }
+    if (changed == true) _reload();
+  }
+
+  Future<void> _onMenu(String action, KnowledgeDocument d) async {
+    if (action == 'view') return _openDetail(d);
+    final Future<bool> Function(BuildContext, KnowledgeDocument) run =
+        switch (action) {
+      'rename' => DocumentActions.rename,
+      'replace' => DocumentActions.replace,
+      _ => DocumentActions.delete,
+    };
+    if (await run(context, d)) _reload();
   }
 
   Widget _statusChip(KnowledgeDocument d, ThemeData theme) {
@@ -169,28 +162,89 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                           itemCount: _docs.length,
                           itemBuilder: (_, i) {
                             final d = _docs[i];
-                            return ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: Icon(
-                                d.status == 'FAILED'
-                                    ? Icons.error_outline
-                                    : Icons.description_outlined,
-                                color: d.status == 'FAILED'
-                                    ? theme.colorScheme.error
-                                    : null,
+                            return Dismissible(
+                              key: ValueKey(d.id),
+                              direction: DismissDirection.endToStart,
+                              // Deslizar para excluir — sempre com confirmação.
+                              confirmDismiss: (_) async {
+                                final deleted =
+                                    await DocumentActions.delete(context, d);
+                                if (deleted) {
+                                  setState(() => _docs.removeWhere(
+                                      (x) => x.id == d.id));
+                                }
+                                return false;
+                              },
+                              background: Container(
+                                alignment: Alignment.centerRight,
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 20),
+                                color: theme.colorScheme.errorContainer,
+                                child: Icon(Icons.delete_outline,
+                                    color: theme.colorScheme.onErrorContainer),
                               ),
-                              title: Text(d.fileName),
-                              subtitle: Text(_subtitle(d)),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  _statusChip(d, theme),
-                                  IconButton(
-                                    tooltip: 'Excluir',
-                                    icon: const Icon(Icons.delete_outline),
-                                    onPressed: () => _delete(d),
-                                  ),
-                                ],
+                              child: ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                onTap: () => _openDetail(d),
+                                leading: Icon(
+                                  d.status == 'FAILED'
+                                      ? Icons.error_outline
+                                      : Icons.description_outlined,
+                                  color: d.status == 'FAILED'
+                                      ? theme.colorScheme.error
+                                      : null,
+                                ),
+                                title: Text(d.fileName),
+                                subtitle: Text(_subtitle(d)),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _statusChip(d, theme),
+                                    PopupMenuButton<String>(
+                                      tooltip: 'Ações',
+                                      onSelected: (a) => _onMenu(a, d),
+                                      itemBuilder: (_) => [
+                                        const PopupMenuItem(
+                                          value: 'view',
+                                          child: ListTile(
+                                            contentPadding: EdgeInsets.zero,
+                                            leading: Icon(Icons.visibility_outlined),
+                                            title: Text('Ver conteúdo'),
+                                          ),
+                                        ),
+                                        const PopupMenuItem(
+                                          value: 'rename',
+                                          child: ListTile(
+                                            contentPadding: EdgeInsets.zero,
+                                            leading: Icon(Icons.edit_outlined),
+                                            title: Text('Renomear'),
+                                          ),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 'replace',
+                                          enabled: !d.isProcessing,
+                                          child: const ListTile(
+                                            contentPadding: EdgeInsets.zero,
+                                            leading: Icon(Icons.upload_file_outlined),
+                                            title: Text('Substituir arquivo'),
+                                          ),
+                                        ),
+                                        PopupMenuItem(
+                                          value: 'delete',
+                                          child: ListTile(
+                                            contentPadding: EdgeInsets.zero,
+                                            leading: Icon(Icons.delete_outline,
+                                                color: theme.colorScheme.error),
+                                            title: Text('Excluir',
+                                                style: TextStyle(
+                                                    color: theme
+                                                        .colorScheme.error)),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
                               ),
                             );
                           },

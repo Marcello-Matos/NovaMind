@@ -61,14 +61,15 @@ class ApiClient {
 
   Future<dynamic> delete(String path) => _send('DELETE', path);
 
-  /// Upload multipart (base de conhecimento).
+  /// Upload multipart (base de conhecimento). `method: 'PUT'` substitui.
   Future<dynamic> uploadFile(
     String path,
     List<int> bytes,
     String fileName, {
     Map<String, String>? query,
+    String method = 'POST',
   }) async {
-    final request = http.MultipartRequest('POST', _uri(path, query));
+    final request = http.MultipartRequest(method, _uri(path, query));
     request.headers.addAll({
       if (token != null) 'Authorization': 'Bearer $token',
     });
@@ -77,7 +78,14 @@ class ApiClient {
     );
     final response = await http.Response.fromStream(await request.send());
     if (response.statusCode >= 400) {
-      throw ApiException(response.statusCode, 'Falha no upload');
+      var message = 'Falha no upload';
+      try {
+        final body = jsonDecode(response.body);
+        final m = body is Map ? body['message'] : null;
+        if (m is String) message = m;
+        if (m is List && m.isNotEmpty) message = m.join(', ');
+      } catch (_) {}
+      throw ApiException(response.statusCode, message);
     }
     return jsonDecode(response.body);
   }

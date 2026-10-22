@@ -199,6 +199,57 @@ class KnowledgeDocument {
       );
 }
 
+class DocumentChunkPreview {
+  final int index;
+  final String content;
+  final String? file;
+  final int? page;
+
+  DocumentChunkPreview({
+    required this.index,
+    required this.content,
+    this.file,
+    this.page,
+  });
+
+  factory DocumentChunkPreview.fromJson(Map<String, dynamic> json) {
+    final source = json['source'] as Map<String, dynamic>?;
+    return DocumentChunkPreview(
+      index: json['chunkIndex'] as int,
+      content: json['content'] as String,
+      file: source?['file'] as String?,
+      page: source?['page'] as int?,
+    );
+  }
+}
+
+class KnowledgeDocumentDetail {
+  final KnowledgeDocument document;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int chunkCount;
+  final List<DocumentChunkPreview> chunks;
+
+  KnowledgeDocumentDetail({
+    required this.document,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.chunkCount,
+    required this.chunks,
+  });
+
+  factory KnowledgeDocumentDetail.fromJson(Map<String, dynamic> json) =>
+      KnowledgeDocumentDetail(
+        document: KnowledgeDocument.fromJson(json),
+        createdAt: DateTime.parse(json['createdAt'] as String),
+        updatedAt: DateTime.parse(json['updatedAt'] as String),
+        chunkCount: json['chunkCount'] as int? ?? 0,
+        chunks: (json['chunks'] as List<dynamic>? ?? [])
+            .map((c) => DocumentChunkPreview.fromJson(c as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
 class UsageSummary {
   final int monthEvents;
   final int monthTokens;

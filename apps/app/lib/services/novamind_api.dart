@@ -300,6 +300,32 @@ class NovaMindApi {
   Future<void> deleteDocument(String id) =>
       client.delete('/knowledge-base/documents/$id');
 
+  /// Detalhes + trechos indexados (paginado).
+  Future<KnowledgeDocumentDetail> getDocument(String id, {int offset = 0}) async =>
+      KnowledgeDocumentDetail.fromJson(await client.get(
+        '/knowledge-base/documents/$id',
+        {'offset': '$offset', 'limit': '20'},
+      ));
+
+  Future<KnowledgeDocument> renameDocument(String id, String fileName) async =>
+      KnowledgeDocument.fromJson(await client.patch(
+        '/knowledge-base/documents/$id',
+        {'fileName': fileName},
+      ));
+
+  /// Substitui o arquivo e reprocessa (mesmo documento).
+  Future<KnowledgeDocument> replaceDocument(
+    String id,
+    List<int> bytes,
+    String fileName,
+  ) async =>
+      KnowledgeDocument.fromJson(await client.uploadFile(
+        '/knowledge-base/documents/$id/file',
+        bytes,
+        fileName,
+        method: 'PUT',
+      ));
+
   // ===== usage =====
   Future<UsageSummary> usageSummary() async =>
       UsageSummary.fromJson(await client.get('/usage/summary'));
