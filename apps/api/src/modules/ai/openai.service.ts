@@ -36,8 +36,8 @@ export class OpenAiService {
   private client: OpenAI | null = null;
   readonly chatModel: string;
   readonly embeddingModel: string;
-  /** Modelo reserva quando o principal está sobrecarregado (null = sem). */
-  readonly fallbackChatModel: string | null;
+  /** Modelos reserva quando o principal está sobrecarregado/sem cota. */
+  private readonly fallbackChatModels: string[];
 
   constructor(private readonly config: ConfigService) {
     const apiKey = config.get<string>('OPENAI_API_KEY');
@@ -54,15 +54,19 @@ export class OpenAiService {
       'OPENAI_EMBEDDING_MODEL',
       'text-embedding-3-small',
     );
-    // Gemini 2.5 Flash devolve 503 "overloaded" em horários de pico; o
-    // Flash-Lite tem capacidade separada. Sobrescreva com
-    // OPENAI_FALLBACK_CHAT_MODEL (vazio em outros provedores = sem reserva).
+    // Gemini 2.5 Flash devolve 503 "overloaded" em horários de pico e o
+    // nível gratuito tem cota baixa por minuto/dia; Flash-Lite e 2.0 Flash
+    // têm cotas separadas. Sobrescreva com OPENAI_FALLBACK_CHAT_MODEL
+    // (lista separada por vírgula; vazio em outros provedores = sem reserva).
     const isGemini = baseURL?.includes('generativelanguage.googleapis.com');
     const fallback = config.get<string>(
       'OPENAI_FALLBACK_CHAT_MODEL',
-      isGemini ? 'gemini-2.5-flash-lite' : '',
+      isGemini ? 'gemini-2.5-flash-lite,gemini-2.0-flash' : '',
     );
-    this.fallbackChatModel = fallback && fallback !== this.chatModel ? fallback : null;
+    this.fallbackChatModels = fallback
+      .split(',')
+      .map((m) => m.trim())
+      .filter((m) => m && m !== this.chatModel);
   }
 
   /**
@@ -116,14 +120,16 @@ export class OpenAiService {
       const transient =
         err instanceof OpenAI.APIConnectionError ||
         (err instanceof OpenAI.APIError && TRANSIENT_STATUSES.has(err.status ?? 0));
-      if (transient && this.fallbackChatModel) {
-        this.logger.warn(
-          `${this.chatModel} indisponível (${(err as Error).message}); usando ${this.fallbackChatModel}`,
-        );
-        try {
-          return await create(this.fallbackChatModel);
-        } catch (fallbackErr) {
-          this.logger.warn(`Modelo reserva também falhou: ${fallbackErr}`);
+      if (transient) {
+        for (const model of this.fallbackChatModels) {
+          this.logger.warn(
+            `${this.chatModel} indisponível (${(err as Error).message}); tentando ${model}`,
+          );
+          try {
+            return await create(model);
+          } catch (fallbackErr) {
+            this.logger.warn(`Modelo reserva ${model} falhou: ${fallbackErr}`);
+          }
         }
       }
       throw this.mapError(err);
