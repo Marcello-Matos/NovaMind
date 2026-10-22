@@ -90,11 +90,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 32),
                   Card(
-                    elevation: 0,
                     color: theme.colorScheme.surfaceContainerHighest
-                        .withValues(alpha: 0.35),
+                        .withValues(alpha: 0.45),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(20),
                       side: BorderSide(
                         color: theme.colorScheme.outlineVariant
                             .withValues(alpha: 0.4),

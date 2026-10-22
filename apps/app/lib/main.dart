@@ -9,6 +9,22 @@ import 'ui/screens/login_screen.dart';
 
 const _seed = Color(0xFF6366F1);
 
+/// Estilo global dos cards: superfície translúcida ("vidro"), sombra
+/// suave e cantos bem arredondados — aplicado a todos os Card do app.
+CardThemeData _cardTheme(ColorScheme scheme, {required bool dark}) =>
+    CardThemeData(
+      clipBehavior: Clip.antiAlias,
+      elevation: 4,
+      shadowColor: dark
+          ? Colors.black.withValues(alpha: 0.45)
+          : scheme.shadow.withValues(alpha: 0.20),
+      color:
+          scheme.surfaceContainerHigh.withValues(alpha: dark ? 0.72 : 0.85),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+    );
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Necessário para o TableCalendar com locale pt_BR (tela de Agenda).
@@ -27,24 +43,30 @@ class NovaMindApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ThemeController()..restore()),
       ],
       child: Builder(
-        builder: (context) => MaterialApp(
-          title: 'NovaMind',
-          debugShowCheckedModeBanner: false,
-          themeMode: context.watch<ThemeController>().mode,
-          theme: ThemeData(
-            useMaterial3: true,
-            colorScheme: ColorScheme.fromSeed(seedColor: _seed),
-          ),
-          darkTheme: ThemeData(
-            useMaterial3: true,
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: _seed,
-              brightness: Brightness.dark,
+        builder: (context) {
+          final lightScheme = ColorScheme.fromSeed(seedColor: _seed);
+          final darkScheme = ColorScheme.fromSeed(
+            seedColor: _seed,
+            brightness: Brightness.dark,
+          );
+          return MaterialApp(
+            title: 'NovaMind',
+            debugShowCheckedModeBanner: false,
+            themeMode: context.watch<ThemeController>().mode,
+            theme: ThemeData(
+              useMaterial3: true,
+              colorScheme: lightScheme,
+              cardTheme: _cardTheme(lightScheme, dark: false),
             ),
-            scaffoldBackgroundColor: const Color(0xFF0B0F17),
-          ),
-          home: const Root(),
-        ),
+            darkTheme: ThemeData(
+              useMaterial3: true,
+              colorScheme: darkScheme,
+              cardTheme: _cardTheme(darkScheme, dark: true),
+              scaffoldBackgroundColor: const Color(0xFF0B0F17),
+            ),
+            home: const Root(),
+          );
+        },
       ),
     );
   }
