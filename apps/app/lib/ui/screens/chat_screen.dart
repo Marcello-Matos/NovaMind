@@ -6,6 +6,7 @@ import '../../services/api_client.dart';
 import '../../services/novamind_api.dart';
 import '../../state/auth_controller.dart';
 import '../widgets/voice_input_button.dart';
+import '../widgets/voice_orb.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -23,6 +24,10 @@ class _ChatScreenState extends State<ChatScreen> {
   String? _activeId;
   bool _sending = false;
   String? _error;
+  bool _voiceOn = false;
+  final _voiceLevel = ValueNotifier<double>(0);
+  /// Respiração constante do orb no estado vazio (IA "viva" parada).
+  final _idleLevel = ValueNotifier<double>(0.12);
 
   @override
   void initState() {
@@ -63,6 +68,8 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _auth?.removeListener(_onEnvChange);
     _input.dispose();
+    _voiceLevel.dispose();
+    _idleLevel.dispose();
     super.dispose();
   }
 
@@ -73,6 +80,15 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       final list = await _api.listConversations(organizationId: _org);
       if (mounted) setState(() => _conversations = list);
+      // Abre a conversa mais recente (ou cria a primeira) para a
+      // assistente poder iniciar a conversa com a saudação do dia.
+      if (mounted && _activeId == null) {
+        if (_conversations.isNotEmpty) {
+          await _open(_conversations.first);
+        } else if (_org == null) {
+          await _newConversation();
+        }
+      }
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     }
@@ -87,8 +103,22 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       final messages = await _api.getMessages(c.id);
       if (mounted) setState(() => _messages = messages);
+      if (_org == null) await _requestBriefing(c.id);
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
+    }
+  }
+
+  /// Saudação proativa do dia — gerada pela API na primeira conversa
+  /// pessoal aberta (no máx. uma por dia); chega como mensagem da IA.
+  Future<void> _requestBriefing(String conversationId) async {
+    try {
+      final message = await _api.briefing(conversationId);
+      if (message != null && mounted && _activeId == conversationId) {
+        setState(() => _messages.add(message));
+      }
+    } on ApiException {
+      // Briefing é enfeite: falha silenciosa para não atrapalhar o chat.
     }
   }
 
@@ -101,6 +131,7 @@ class _ChatScreenState extends State<ChatScreen> {
         _messages = [];
         _pending = [];
       });
+      if (_org == null) await _requestBriefing(c.id);
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     }
@@ -332,13 +363,23 @@ class _ChatScreenState extends State<ChatScreen> {
     return Column(
       children: [
         Expanded(
-          child: _messages.isEmpty
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: _messages.isEmpty
                     ? Center(
-                        child: Text(
-                          'Como posso ajudar?\nConverse, crie tarefas ou resuma documentos.',
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.bodyLarge
-                              ?.copyWith(color: theme.hintColor),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            VoiceOrb(level: _idleLevel, size: 150),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Como posso ajudar?\nConverse, crie tarefas ou resuma documentos.',
+                              textAlign: TextAlign.center,
+                              style: theme.textTheme.bodyLarge
+                                  ?.copyWith(color: theme.hintColor),
+                            ),
+                          ],
                         ),
                       )
                     : ListView.builder(
@@ -367,6 +408,48 @@ class _ChatScreenState extends State<ChatScreen> {
                           );
                         },
                       ),
+              ),
+              // Orb "vivo" durante a captura: movimenta com o volume da voz.
+              if (_voiceOn)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Container(
+                      color: theme.scaffoldBackgroundColor
+                          .withValues(alpha: 0.88),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            VoiceOrb(level: _voiceLevel, size: 210),
+                            const SizedBox(height: 20),
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 32),
+                              child: ValueListenableBuilder<TextEditingValue>(
+                                valueListenable: _input,
+                                builder: (_, value, child) => Text(
+                                  value.text.isEmpty
+                                      ? 'Ouvindo…'
+                                      : value.text,
+                                  textAlign: TextAlign.center,
+                                  style: theme.textTheme.bodyLarge,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Solte ou toque no microfone para enviar',
+                              style: theme.textTheme.bodySmall
+                                  ?.copyWith(color: theme.hintColor),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
         if (_sending)
           const LinearProgressIndicator(minHeight: 2),
@@ -426,6 +509,8 @@ class _ChatScreenState extends State<ChatScreen> {
               VoiceInputButton(
                 key: _voiceKey,
                 enabled: !_sending,
+                onLevelChanged: (level) => _voiceLevel.value = level,
+                onListeningChanged: (on) => setState(() => _voiceOn = on),
                 onPartial: (text) => _input.value = TextEditingValue(
                   text: text,
                   selection: TextSelection.collapsed(offset: text.length),

@@ -135,6 +135,53 @@ export class ConversationsService {
     return { message: assistantMessage, pendingActions: result.pendingActions };
   }
 
+  /**
+   * Saudação proativa do assistente pessoal: no máximo uma por dia por
+   * usuário (marcada com toolName='briefing'), persistida na conversa
+   * aberta — é ela quem "inicia a conversa".
+   */
+  async briefing(userId: string, conversationId: string) {
+    const conversation = await this.findAuthorized(userId, conversationId);
+    if (conversation.organizationId) {
+      throw new BadRequestException(
+        'Briefing disponível apenas no assistente pessoal',
+      );
+    }
+    const brNow = new Date(Date.now() - 3 * 3_600_000);
+    const dayStart = new Date(
+      Date.UTC(brNow.getUTCFullYear(), brNow.getUTCMonth(), brNow.getUTCDate(), 3),
+    );
+    const existing = await this.prisma.message.findFirst({
+      where: {
+        role: MessageRole.ASSISTANT,
+        toolName: 'briefing',
+        createdAt: { gte: dayStart },
+        conversation: { userId },
+      },
+    });
+    if (existing) return { alreadySent: true };
+
+    const result = await this.orchestrator.briefing(userId);
+    const message = await this.prisma.message.create({
+      data: {
+        conversationId,
+        role: MessageRole.ASSISTANT,
+        content: result.content,
+        toolName: 'briefing',
+        promptTokens: result.usage.promptTokens,
+        completionTokens: result.usage.completionTokens,
+        estimatedCostUsd: result.usage.estimatedCostUsd,
+      },
+    });
+    if (!conversation.title) {
+      await this.prisma.conversation.update({
+        where: { id: conversationId },
+        data: { title: 'Saudação do dia' },
+      });
+    }
+    return { message };
+  }
+
   async remove(userId: string, id: string) {
     await this.findAuthorized(userId, id);
     await this.prisma.conversation.delete({ where: { id } });

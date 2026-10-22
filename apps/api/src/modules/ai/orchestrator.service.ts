@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AgentType, MessageRole } from '@prisma/client';
+import { AgentType, MessageRole, TaskStatus } from '@prisma/client';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { PrismaService } from '../../prisma/prisma.service';
+import { brazilHolidaysBetween } from '../calendar/brazil-holidays';
 import { MemoryService } from '../memory/memory.module';
 import { UsageService } from '../usage/usage.module';
 import { OpenAiService } from './openai.service';
@@ -155,6 +156,162 @@ export class OrchestratorService {
     return {
       content,
       pendingActions,
+      usage: {
+        model: this.openai.chatModel,
+        promptTokens,
+        completionTokens,
+        estimatedCostUsd,
+      },
+    };
+  }
+
+  /**
+   * Saudação proativa: reúne o contexto do dia (compromissos, tarefas,
+   * hábitos, lembretes, memórias) e o modelo escreve a mensagem de
+   * abertura — "Bom dia, Marcello. Hoje você tem reunião às 15h…".
+   * Gerada no máximo uma vez por dia por usuário (dedupe na conversa).
+   */
+  async briefing(userId: string): Promise<OrchestratorResult> {
+    // Dia civil em Brasília (UTC-3 fixo — sem horário de verão desde 2019).
+    const brNow = new Date(Date.now() - 3 * 3_600_000);
+    const y = brNow.getUTCFullYear();
+    const m = brNow.getUTCMonth();
+    const d = brNow.getUTCDate();
+    const dayStart = new Date(Date.UTC(y, m, d, 3)); // 00:00 -03:00
+    const dayEnd = new Date(Date.UTC(y, m, d + 1, 3)); // 24:00 -03:00
+    const weekday = dayStart.getUTCDay();
+
+    const [user, events, tasks, reminders, habits, memories, holidays] =
+      await Promise.all([
+        this.prisma.user.findUnique({
+          where: { id: userId },
+          select: { name: true },
+        }),
+        this.prisma.calendarEvent.findMany({
+          where: {
+            ownerId: userId,
+            organizationId: null,
+            startsAt: { gte: dayStart, lt: dayEnd },
+            allDay: false,
+          },
+          orderBy: { startsAt: 'asc' },
+          take: 8,
+          select: { title: true, startsAt: true, endsAt: true },
+        }),
+        this.prisma.task.findMany({
+          where: { ownerId: userId, organizationId: null, status: { not: TaskStatus.DONE } },
+          orderBy: [{ priority: 'desc' }, { dueAt: { sort: 'asc', nulls: 'last' } }],
+          take: 5,
+          select: { title: true, priority: true, dueAt: true },
+        }),
+        this.prisma.reminder.findMany({
+          where: {
+            ownerId: userId,
+            firedAt: null,
+            remindAt: { gte: dayStart, lt: dayEnd },
+          },
+          orderBy: { remindAt: 'asc' },
+          take: 5,
+          select: { title: true, remindAt: true },
+        }),
+        this.prisma.habit.findMany({
+          where: {
+            ownerId: userId,
+            active: true,
+            daysOfWeek: { contains: String(weekday) },
+          },
+          select: {
+            name: true,
+            logs: {
+              where: { date: new Date(Date.UTC(y, m, d)), done: true },
+              select: { id: true },
+            },
+          },
+        }),
+        this.memory.listEnabled(userId),
+        Promise.resolve(
+          brazilHolidaysBetween(dayStart, dayEnd).map((h) => h.name),
+        ),
+      ]);
+
+    const brOf = (dt: Date) => new Date(dt.getTime() - 3 * 3_600_000);
+    const fmt = (dt: Date) => {
+      const br = brOf(dt);
+      return `${String(br.getUTCHours()).padStart(2, '0')}:${String(br.getUTCMinutes()).padStart(2, '0')}`;
+    };
+    const fmtDate = (dt: Date) => {
+      const br = brOf(dt);
+      return `${br.getUTCDate()}/${br.getUTCMonth() + 1}`;
+    };
+
+    const hora = fmt(new Date());
+    const saudacao =
+      brNow.getUTCHours() < 12
+        ? 'Bom dia'
+        : brNow.getUTCHours() < 18
+          ? 'Boa tarde'
+          : 'Boa noite';
+
+    const contexto = [
+      `Agora: ${hora} (${saudacao}), dia ${d}/${m + 1}/${y}.`,
+      user?.name ? `Nome do usuário: ${user.name.split(' ')[0]}.` : '',
+      holidays.length ? `Feriado hoje: ${holidays.join(', ')}.` : '',
+      events.length
+        ? `Compromissos de hoje: ${events.map((e) => `${e.title} às ${fmt(e.startsAt)}`).join('; ')}.`
+        : 'Nenhum compromisso hoje.',
+      reminders.length
+        ? `Lembretes de hoje: ${reminders.map((r) => `${r.title} às ${fmt(r.remindAt)}`).join('; ')}.`
+        : '',
+      tasks.length
+        ? `Tarefas pendentes: ${tasks.map((t) => `${t.title}${t.dueAt ? ` (vence ${fmtDate(t.dueAt)})` : ''}`).join('; ')}.`
+        : '',
+      habits.length
+        ? `Hábitos de hoje: ${habits.map((h) => `${h.name}${h.logs.length ? ' (concluído)' : ' (pendente)'}`).join('; ')}.`
+        : '',
+      memories.length
+        ? `Fatos/rotinas na memória: ${memories.map((me) => `${me.key}: ${me.value}`).join('; ')}.`
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const completion = await this.openai.chat([
+      {
+        role: 'system',
+        content:
+          'Você é o NovaMind, assistente pessoal proativo em pt-BR. Escreva a ' +
+          'mensagem de abertura do dia usando APENAS o contexto fornecido — ' +
+          'nunca invente compromissos ou dados. Formato: saudação com o ' +
+          'primeiro nome, depois 2-4 linhas curtas e úteis (compromissos com ' +
+          'horários, pendências, hábitos não feitos, rotinas da memória como ' +
+          '"você costuma almoçar às 13h"), e termine com uma pergunta breve ' +
+          'oferecendo ajuda (ex.: "Deseja reorganizar seu dia?"). Tom ' +
+          'caloroso e direto, sem emojis e sem markdown. Se o contexto estiver ' +
+          'vazio, apenas cumprimente e ofereça ajuda.',
+      },
+      { role: 'user', content: contexto },
+    ]);
+    const promptTokens = completion.usage?.prompt_tokens ?? 0;
+    const completionTokens = completion.usage?.completion_tokens ?? 0;
+    const estimatedCostUsd = this.openai.estimateCostUsd(
+      this.openai.chatModel,
+      promptTokens,
+      completionTokens,
+    );
+    await this.usage.record({
+      userId,
+      eventType: 'CHAT_COMPLETION',
+      model: this.openai.chatModel,
+      promptTokens,
+      completionTokens,
+      estimatedCostUsd,
+      metadata: { briefing: true },
+    });
+    return {
+      content:
+        completion.choices[0]?.message.content ??
+        'Olá! Como posso ajudar hoje?',
+      pendingActions: [],
       usage: {
         model: this.openai.chatModel,
         promptTokens,

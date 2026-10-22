@@ -253,6 +253,14 @@ class NovaMindApi {
     return (ChatMessage.fromJson(res['message']), pending);
   }
 
+  /// Saudação proativa do dia (máx. 1/dia por usuário): retorna a mensagem
+  /// nova ou null quando a do dia já foi gerada em outra conversa.
+  Future<ChatMessage?> briefing(String conversationId) async {
+    final res = await client.post('/conversations/$conversationId/briefing', {});
+    final msg = res['message'];
+    return msg == null ? null : ChatMessage.fromJson(msg);
+  }
+
   // ===== tasks =====
   Future<List<TaskItem>> listTasks({String? organizationId}) async =>
       (await client.get(

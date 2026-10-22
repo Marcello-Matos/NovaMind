@@ -40,6 +40,11 @@ export class ConversationsController {
     return this.conversations.getWithMessages(user.id, id);
   }
 
+  @Post(':id/briefing')
+  briefing(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.conversations.briefing(user.id, id);
+  }
+
   @Post(':id/messages')
   sendMessage(
     @CurrentUser() user: AuthUser,

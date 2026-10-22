@@ -13,15 +13,21 @@ import 'package:speech_to_text/speech_to_text.dart';
 ///
 /// [onPartial] recebe a transcrição ao vivo (exibida no campo de texto);
 /// [onFinished] recebe o texto final para envio ao assistente.
+/// [onLevelChanged] reporta o volume da voz (0..1) para animar o orb;
+/// [onListeningChanged] avisa quando a captura começa/termina.
 class VoiceInputButton extends StatefulWidget {
   final ValueChanged<String> onPartial;
   final ValueChanged<String> onFinished;
+  final ValueChanged<double>? onLevelChanged;
+  final ValueChanged<bool>? onListeningChanged;
   final bool enabled;
 
   const VoiceInputButton({
     super.key,
     required this.onPartial,
     required this.onFinished,
+    this.onLevelChanged,
+    this.onListeningChanged,
     this.enabled = true,
   });
 
@@ -41,6 +47,12 @@ class VoiceInputButtonState extends State<VoiceInputButton> {
   String _text = '';
   Completer<void>? _finalResult;
 
+  void _setListening(bool value) {
+    _listening = value;
+    widget.onListeningChanged?.call(value);
+    if (!value) widget.onLevelChanged?.call(0);
+  }
+
   /// Interrompe a escuta descartando o texto (ex.: usuário tocou em Enviar).
   Future<void> cancel() async {
     if (!_listening && !_accepting) return;
@@ -49,7 +61,7 @@ class VoiceInputButtonState extends State<VoiceInputButton> {
     _finalResult?.complete();
     _finalResult = null;
     await _speech.cancel();
-    if (mounted) setState(() => _listening = false);
+    if (mounted) setState(() => _setListening(false));
   }
 
   @override
@@ -108,7 +120,7 @@ class VoiceInputButtonState extends State<VoiceInputButton> {
     _finalResult = null;
     _text = '';
     if (!mounted) return;
-    setState(() => _listening = false);
+    setState(() => _setListening(false));
     // "no match"/"speech timeout" = não ouviu nada; não é falha do sistema.
     if (error.errorMsg.contains('no_match') ||
         error.errorMsg.contains('speech_timeout')) {
@@ -133,9 +145,12 @@ class VoiceInputButtonState extends State<VoiceInputButton> {
     _text = '';
     _accepting = true;
     _finalResult = Completer<void>();
-    setState(() => _listening = true);
+    setState(() => _setListening(true));
     await _speech.listen(
       onResult: _onResult,
+      // dB do microfone (~-2..10) normalizado para o orb: 0..1.
+      onSoundLevelChange: (level) => widget.onLevelChanged
+          ?.call(((level + 2) / 12).clamp(0.0, 1.0)),
       listenOptions: SpeechListenOptions(
         localeId: _localeId,
         listenFor: const Duration(minutes: 1),
@@ -161,7 +176,7 @@ class VoiceInputButtonState extends State<VoiceInputButton> {
       if (!_accepting) return; // cancelado enquanto aguardava
       _accepting = false;
       _finalResult = null;
-      if (mounted) setState(() => _listening = false);
+      if (mounted) setState(() => _setListening(false));
       final text = _text.trim();
       _text = '';
       if (text.isNotEmpty) widget.onFinished(text);
