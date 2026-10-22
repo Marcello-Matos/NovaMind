@@ -270,6 +270,50 @@ export const TOOL_DEFINITIONS: Record<string, ToolDefinition> = {
       },
     },
   },
+  get_current_datetime: {
+    sensitive: false,
+    spec: {
+      type: 'function',
+      function: {
+        name: 'get_current_datetime',
+        description:
+          'Retorna data, hora e dia da semana atuais no fuso do usuário ' +
+          '(America/Sao_Paulo). Use para perguntas como "que horas são?", ' +
+          '"que dia é hoje?" ou quando precisar do instante exato.',
+        parameters: { type: 'object', properties: {}, required: [] },
+      },
+    },
+  },
+  get_weather: {
+    sensitive: false,
+    spec: {
+      type: 'function',
+      function: {
+        name: 'get_weather',
+        description:
+          'Consulta a previsão do tempo real (Open-Meteo): condição atual ' +
+          'e previsão diária (máx/mín, chance de chuva) para uma cidade. ' +
+          'Se a cidade for omitida, usa a cidade memorizada do usuário; ' +
+          'sem memória, assume São Paulo e avisa.',
+        parameters: {
+          type: 'object',
+          properties: {
+            city: {
+              type: 'string',
+              description:
+                'Nome da cidade (ex.: "Porto Alegre"). Omita para usar ' +
+                'a cidade do usuário.',
+            },
+            days: {
+              type: 'number',
+              description: 'Dias de previsão, 1 a 7 (padrão 3)',
+            },
+          },
+          required: [],
+        },
+      },
+    },
+  },
   send_message: {
     sensitive: true,
     spec: {

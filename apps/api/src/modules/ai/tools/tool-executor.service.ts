@@ -339,6 +339,24 @@ export class ToolExecutorService {
       case 'organize_day':
         return this.organizeDay(ctx, args);
 
+      case 'get_current_datetime': {
+        const now = new Date(Date.now() - 3 * 60 * 60 * 1000);
+        const weekday = [
+          'domingo', 'segunda-feira', 'terça-feira', 'quarta-feira',
+          'quinta-feira', 'sexta-feira', 'sábado',
+        ][now.getUTCDay()];
+        const iso = now.toISOString();
+        return {
+          data: `${weekday}, ${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`,
+          hora: iso.slice(11, 16),
+          iso: `${iso.slice(0, 16)}:00-03:00`,
+          fuso: 'America/Sao_Paulo (UTC-3)',
+        };
+      }
+
+      case 'get_weather':
+        return this.fetchWeather(ctx, args);
+
       case 'send_message':
         // Integrações externas entram na fase de automações (semanas 7–8).
         return {
@@ -505,6 +523,135 @@ export class ToolExecutorService {
       observacao:
         'Apresente o cronograma de forma clara e pergunte se quer que os blocos de tarefa virem lembretes.',
     };
+  }
+
+  /**
+   * Previsão do tempo via Open-Meteo (gratuito, sem chave).
+   * Cidade: parâmetro → memória do usuário (key "cidade") → São Paulo.
+   */
+  private async fetchWeather(ctx: ToolContext, args: Record<string, unknown>) {
+    let city = String(args.city ?? '').trim();
+    let assumed = false;
+    if (!city) {
+      const mem = await this.prisma.memoryEntry.findFirst({
+        where: {
+          userId: ctx.userId,
+          OR: [
+            { key: { contains: 'cidade', mode: 'insensitive' } },
+            { key: { contains: 'local', mode: 'insensitive' } },
+          ],
+        },
+        select: { value: true },
+      });
+      city = mem?.value.trim() || 'São Paulo';
+      assumed = !mem;
+    }
+
+    const days = Math.min(7, Math.max(1, Number(args.days) || 3));
+    const geoRes = await fetch(
+      'https://geocoding-api.open-meteo.com/v1/search?' +
+        `name=${encodeURIComponent(city)}&count=1&language=pt&format=json`,
+      { signal: AbortSignal.timeout(8000) },
+    );
+    if (!geoRes.ok) return { error: 'Serviço de clima indisponível no momento' };
+    const geo = (await geoRes.json()) as {
+      results?: Array<{
+        latitude: number;
+        longitude: number;
+        name: string;
+        admin1?: string;
+        country?: string;
+      }>;
+    };
+    const place = geo.results?.[0];
+    if (!place) {
+      return {
+        error:
+          `Cidade "${city}" não encontrada. Peça ao usuário para repetir ` +
+          'o nome da cidade.',
+      };
+    }
+
+    const params = new URLSearchParams({
+      latitude: String(place.latitude),
+      longitude: String(place.longitude),
+      current:
+        'temperature_2m,apparent_temperature,relative_humidity_2m,' +
+        'weather_code,wind_speed_10m,is_day',
+      daily:
+        'weather_code,temperature_2m_max,temperature_2m_min,' +
+        'precipitation_probability_max,sunrise,sunset',
+      timezone: 'America/Sao_Paulo',
+      forecast_days: String(days),
+    });
+    const wxRes = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!wxRes.ok) return { error: 'Serviço de clima indisponível no momento' };
+    const wx = (await wxRes.json()) as {
+      current: {
+        temperature_2m: number;
+        apparent_temperature: number;
+        relative_humidity_2m: number;
+        weather_code: number;
+        wind_speed_10m: number;
+      };
+      daily: {
+        time: string[];
+        weather_code: number[];
+        temperature_2m_max: number[];
+        temperature_2m_min: number[];
+        precipitation_probability_max: number[];
+      };
+    };
+
+    return {
+      cidade: [place.name, place.admin1 ?? place.country]
+        .filter(Boolean)
+        .join(', '),
+      ...(assumed
+        ? {
+            aviso:
+              'Cidade assumida (São Paulo) — se o usuário estiver em outra, ' +
+              'pergunte e salve com remember_fact (key "cidade") para as ' +
+              'próximas consultas.',
+          }
+        : {}),
+      agora: {
+        temperatura: `${Math.round(wx.current.temperature_2m)}°C`,
+        sensacao: `${Math.round(wx.current.apparent_temperature)}°C`,
+        umidade: `${wx.current.relative_humidity_2m}%`,
+        vento: `${Math.round(wx.current.wind_speed_10m)} km/h`,
+        condicao: this.weatherLabel(wx.current.weather_code),
+      },
+      previsao: wx.daily.time.map((date, i) => ({
+        data: date,
+        min: `${Math.round(wx.daily.temperature_2m_min[i])}°C`,
+        max: `${Math.round(wx.daily.temperature_2m_max[i])}°C`,
+        chuva: `${wx.daily.precipitation_probability_max[i] ?? 0}%`,
+        condicao: this.weatherLabel(wx.daily.weather_code[i]),
+      })),
+      fonte: 'Open-Meteo',
+    };
+  }
+
+  /** Códigos WMO do Open-Meteo → descrição em pt-BR. */
+  private weatherLabel(code: number): string {
+    const labels: Record<number, string> = {
+      0: 'céu limpo', 1: 'predominantemente limpo', 2: 'parcialmente nublado',
+      3: 'nublado', 45: 'névoa', 48: 'névoa com geada',
+      51: 'garoa fraca', 53: 'garoa', 55: 'garoa forte',
+      56: 'garoa congelante', 57: 'garoa congelante forte',
+      61: 'chuva fraca', 63: 'chuva moderada', 65: 'chuva forte',
+      66: 'chuva congelante', 67: 'chuva congelante forte',
+      71: 'neve fraca', 73: 'neve moderada', 75: 'neve forte',
+      77: 'grãos de neve',
+      80: 'pancadas de chuva fracas', 81: 'pancadas de chuva',
+      82: 'pancadas de chuva fortes', 85: 'neve em pancadas',
+      86: 'neve forte em pancadas',
+      95: 'trovoada', 96: 'trovoada com granizo', 99: 'trovoada com granizo forte',
+    };
+    return labels[code] ?? `condição ${code}`;
   }
 
   private tomorrow(): string {

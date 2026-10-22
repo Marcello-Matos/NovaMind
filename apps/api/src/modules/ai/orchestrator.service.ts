@@ -383,6 +383,12 @@ export class OrchestratorService {
           'perguntar — apenas informe que criou e para quando.\n' +
           '- "Organize meu dia/de amanhã": use organize_day e apresente o ' +
           'cronograma como lista limpa (hora — item), oferecendo ajustes.\n' +
+          '- Clima/tempo ("vai chover?", "previsão pra amanhã", "como está ' +
+          'o tempo?"): use get_weather — nunca invente dados meteorológicos. ' +
+          'Quando o usuário mencionar onde mora ou a cidade desejada, salve ' +
+          'com remember_fact (key "cidade") para as próximas consultas.\n' +
+          '- "Que horas são?" / "que dia é hoje?": use get_current_datetime ' +
+          'para a resposta exata.\n' +
           '- Destino explícito manda: se o usuário pedir "coloca na memória", ' +
           '"anota", "cria tarefa", "agenda", "me lembra" etc., use EXATAMENTE ' +
           'essa ferramenta — mesmo que o assunto já esteja registrado em outro ' +
