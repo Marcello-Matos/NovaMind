@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -25,6 +26,7 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
+  int _navTaps = 0;
   bool _creatingOrg = false;
 
   static const _destinations = [
@@ -201,7 +203,9 @@ class _HomeShellState extends State<HomeShell> {
 
     final navDestinations = _destinations
         .map((d) => NavigationRailDestination(
-              icon: Icon(d.icon),
+              icon: _NavIcon(icon: d.icon, trigger: _navTaps),
+              selectedIcon:
+                  _NavIcon(icon: d.icon, selected: true, trigger: _navTaps),
               label: Text(d.label),
             ))
         .toList();
@@ -221,10 +225,18 @@ class _HomeShellState extends State<HomeShell> {
         body: body,
         bottomNavigationBar: NavigationBar(
           selectedIndex: _index,
-          onDestinationSelected: (i) => setState(() => _index = i),
+          onDestinationSelected: (i) => setState(() {
+            _index = i;
+            _navTaps++;
+          }),
           destinations: _destinations
               .map((d) => NavigationDestination(
-                    icon: Icon(d.icon),
+                    icon: _NavIcon(icon: d.icon, trigger: _navTaps),
+                    selectedIcon: _NavIcon(
+                      icon: d.icon,
+                      selected: true,
+                      trigger: _navTaps,
+                    ),
                     label: d.label,
                   ))
               .toList(),
@@ -238,7 +250,10 @@ class _HomeShellState extends State<HomeShell> {
         children: [
           NavigationRail(
             selectedIndex: _index,
-            onDestinationSelected: (i) => setState(() => _index = i),
+            onDestinationSelected: (i) => setState(() {
+              _index = i;
+              _navTaps++;
+            }),
             labelType: NavigationRailLabelType.all,
             leading: Column(
               children: [
@@ -264,6 +279,85 @@ class _HomeShellState extends State<HomeShell> {
           Expanded(child: body),
         ],
       ),
+    );
+  }
+}
+
+/// Ícone de destino do NavigationBar/Rail.
+///
+/// - Tamanho 26.4 (+10% sobre o padrão 24).
+/// - Selecionado: brilho neon (glifo duplicado com blur atrás) na cor
+///   primária.
+/// - [trigger] muda a cada toque no destino: o ícone selecionado faz um
+///   "pop" elástico — a animação de clique. Os slots icon/selectedIcon do
+///   framework ficam permanentemente montados, então o gatilho é um
+///   contador (didUpdateWidget), não o initState.
+class _NavIcon extends StatefulWidget {
+  final IconData icon;
+  final bool selected;
+  final int trigger;
+
+  const _NavIcon({
+    required this.icon,
+    this.selected = false,
+    required this.trigger,
+  });
+
+  @override
+  State<_NavIcon> createState() => _NavIconState();
+}
+
+class _NavIconState extends State<_NavIcon>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pop = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 280),
+    value: 1,
+  );
+
+  @override
+  void didUpdateWidget(covariant _NavIcon old) {
+    super.didUpdateWidget(old);
+    if (widget.selected && widget.trigger != old.trigger) {
+      _pop.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _pop.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    const size = 26.4;
+    final icon = Icon(
+      widget.icon,
+      size: size,
+      color: widget.selected ? scheme.primary : scheme.onSurfaceVariant,
+    );
+    return ScaleTransition(
+      scale: Tween(begin: 0.72, end: 1.0).animate(
+        CurvedAnimation(parent: _pop, curve: Curves.easeOutBack),
+      ),
+      child: widget.selected
+          ? Stack(
+              alignment: Alignment.center,
+              children: [
+                ImageFiltered(
+                  imageFilter: ui.ImageFilter.blur(sigmaX: 4, sigmaY: 4),
+                  child: Icon(
+                    widget.icon,
+                    size: size,
+                    color: scheme.primary.withValues(alpha: 0.65),
+                  ),
+                ),
+                icon,
+              ],
+            )
+          : icon,
     );
   }
 }
