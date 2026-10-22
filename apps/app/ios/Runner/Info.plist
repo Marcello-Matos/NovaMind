@@ -28,6 +28,14 @@
 				<string>com.googleusercontent.apps.1029334450863-ncac0fhj1boi36nn2gi9jbr8jvr78ef2</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>novamind</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleShortVersionString</key>
 	<string>$(FLUTTER_BUILD_NAME)</string>

@@ -18,7 +18,8 @@ class AgendaScreen extends StatefulWidget {
   State<AgendaScreen> createState() => _AgendaScreenState();
 }
 
-class _AgendaScreenState extends State<AgendaScreen> {
+class _AgendaScreenState extends State<AgendaScreen>
+    with WidgetsBindingObserver {
   NovaMindApi get api => context.read<AuthController>().api;
   DateTime _focusedDay = DateTime.now();
   DateTime _selectedDay = DateTime.now();
@@ -34,7 +35,26 @@ class _AgendaScreenState extends State<AgendaScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Voltou do navegador (consentimento do Google): recarrega status + eventos.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _googleConnected) {
+      _load();
+    } else if (state == AppLifecycleState.resumed) {
+      _loadGoogleStatus().then((_) {
+        if (_googleConnected && mounted) _load();
+      });
+    }
   }
 
   Future<void> _load() async {
@@ -106,10 +126,12 @@ class _AgendaScreenState extends State<AgendaScreen> {
     try {
       final res = await api.googleSync();
       if (!mounted) return;
+      final holidays = res['holidays'] as int?;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(
           'Sincronizado: ${res['imported'] ?? 0} importados, '
-          '${res['pushed'] ?? 0} enviados ao Google',
+          '${res['pushed'] ?? 0} enviados'
+          '${holidays == null ? '' : holidays < 0 ? ' · feriados: falha' : ' · $holidays feriados'}',
         ),
       ));
       // Novos compromissos podem ter gerado lembretes: reagenda as notificações.

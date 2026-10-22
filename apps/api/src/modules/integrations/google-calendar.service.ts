@@ -167,8 +167,9 @@ export class GoogleCalendarService {
     return `<!doctype html><html lang="pt-br"><meta charset="utf-8">
 <title>NovaMind</title>
 <body style="font-family:sans-serif;background:#0B0F17;color:#E7E9EE;display:grid;place-items:center;height:100vh;text-align:center">
-<div><h1>Agenda conectada ✓</h1>
-<p>Sua Google Agenda agora sincroniza com o NovaMind.<br>Você pode fechar esta página e voltar ao app.</p></div>
+<div><h1>Agenda conectada &#10003;</h1>
+<p>Sua Google Agenda agora sincroniza com o NovaMind.<br>Abrindo o app…</p></div>
+<script>setTimeout(function(){window.location.replace('novamind://agenda')},1200)</script>
 </body></html>`;
   }
 
@@ -204,6 +205,7 @@ export class GoogleCalendarService {
     let imported = 0;
     let deleted = 0;
     let pushed = 0;
+    let holidaysImported = 0;
     let nextSyncToken: string | null = null;
 
     // ----- Google -> app (incremental) -----
@@ -345,18 +347,22 @@ export class GoogleCalendarService {
       },
     });
     try {
-      await this.syncHolidays(userId, accessToken);
+      const holidays = await this.syncHolidays(userId, accessToken);
+      holidaysImported = holidays;
     } catch (e) {
       this.logger.warn(`sync de feriados falhou: ${e}`);
+      holidaysImported = -1; // sinaliza falha para o app diagnosticar
     }
-    return { imported, deleted, pushed };
+    return { imported, deleted, pushed, holidays: holidaysImported };
   }
 
   /**
    * Importa todos os feriados nacionais do Brasil (agenda oficial do Google,
    * somente leitura): janela de 30 dias atrás até 18 meses à frente.
+   * Retorna a quantidade importada/atualizada.
    */
   private async syncHolidays(userId: string, accessToken: string) {
+    let count = 0;
     const params = new URLSearchParams({
       maxResults: '250',
       singleEvents: 'true',
@@ -395,7 +401,9 @@ export class GoogleCalendarService {
           googleSyncedAt: new Date(),
         },
       });
+      count++;
     }
+    return count;
   }
 
   private async syncUserFull(userId: string) {
