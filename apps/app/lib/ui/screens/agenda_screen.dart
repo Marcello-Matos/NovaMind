@@ -287,10 +287,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
   @override
   Widget build(BuildContext context) {
     final dayEvents = _events
-        .where((e) =>
-            e.startsAt.year == _selectedDay.year &&
-            e.startsAt.month == _selectedDay.month &&
-            e.startsAt.day == _selectedDay.day)
+        .where((e) => _sameDay(_eventDay(e), _selectedDay))
         .toList();
     final theme = Theme.of(context);
     return Scaffold(
@@ -337,7 +334,7 @@ class _AgendaScreenState extends State<AgendaScreen> {
                       availableGestures: AvailableGestures.horizontalSwipe,
                       locale: 'pt_BR',
                       eventLoader: (d) => _events
-                          .where((e) => _sameDay(e.startsAt, d))
+                          .where((e) => _sameDay(_eventDay(e), d))
                           .toList(),
                       headerStyle: const HeaderStyle(
                         formatButtonVisible: false,
@@ -526,6 +523,11 @@ class _AgendaScreenState extends State<AgendaScreen> {
 
   String _fmtTime(DateTime d) =>
       '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+
+  /// Dia do evento já convertido: eventos de dia inteiro (feriados) chegam
+  /// como meia-noite UTC e, no fuso -03:00, cairiam no dia anterior.
+  DateTime _eventDay(CalendarEventItem e) =>
+      e.allDay ? e.startsAt.toUtc() : e.startsAt;
 
   String _fmtReminder(ReminderItem r) {
     final local = r.remindAt.toLocal();
