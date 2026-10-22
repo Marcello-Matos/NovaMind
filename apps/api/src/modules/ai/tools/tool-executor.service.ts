@@ -548,12 +548,39 @@ export class ToolExecutorService {
     }
 
     const days = Math.min(7, Math.max(1, Number(args.days) || 3));
+    const openMeteo = await this.fetchOpenMeteo(city, days).catch(() => null);
+    if (openMeteo) return this.withCityNotice(openMeteo, assumed);
+
+    // Open-Meteo pode bloquear IPs de cloud — fallback: CPTEC via
+    // BrasilAPI (dados oficiais, feito para consumo por servidores).
+    const cptec = await this.fetchCptec(city, days).catch(() => null);
+    if (cptec) return this.withCityNotice(cptec, assumed);
+
+    return { error: 'Serviço de clima indisponível no momento' };
+  }
+
+  private withCityNotice(result: Record<string, unknown>, assumed: boolean) {
+    return {
+      ...result,
+      ...(assumed
+        ? {
+            aviso:
+              'Cidade assumida (São Paulo) — se o usuário estiver em outra, ' +
+              'pergunte e salve com remember_fact (key "cidade") para as ' +
+              'próximas consultas.',
+          }
+        : {}),
+    };
+  }
+
+  private async fetchOpenMeteo(city: string, days: number) {
+    const headers = { 'User-Agent': 'NovaMind/1.0 (assistente pessoal)' };
     const geoRes = await fetch(
       'https://geocoding-api.open-meteo.com/v1/search?' +
         `name=${encodeURIComponent(city)}&count=1&language=pt&format=json`,
-      { signal: AbortSignal.timeout(8000) },
+      { headers, signal: AbortSignal.timeout(8000) },
     );
-    if (!geoRes.ok) return { error: 'Serviço de clima indisponível no momento' };
+    if (!geoRes.ok) return null;
     const geo = (await geoRes.json()) as {
       results?: Array<{
         latitude: number;
@@ -585,9 +612,10 @@ export class ToolExecutorService {
       forecast_days: String(days),
     });
     const wxRes = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, {
+      headers,
       signal: AbortSignal.timeout(8000),
     });
-    if (!wxRes.ok) return { error: 'Serviço de clima indisponível no momento' };
+    if (!wxRes.ok) return null;
     const wx = (await wxRes.json()) as {
       current: {
         temperature_2m: number;
@@ -609,14 +637,6 @@ export class ToolExecutorService {
       cidade: [place.name, place.admin1 ?? place.country]
         .filter(Boolean)
         .join(', '),
-      ...(assumed
-        ? {
-            aviso:
-              'Cidade assumida (São Paulo) — se o usuário estiver em outra, ' +
-              'pergunte e salve com remember_fact (key "cidade") para as ' +
-              'próximas consultas.',
-          }
-        : {}),
       agora: {
         temperatura: `${Math.round(wx.current.temperature_2m)}°C`,
         sensacao: `${Math.round(wx.current.apparent_temperature)}°C`,
@@ -632,6 +652,58 @@ export class ToolExecutorService {
         condicao: this.weatherLabel(wx.daily.weather_code[i]),
       })),
       fonte: 'Open-Meteo',
+    };
+  }
+
+  /** Fallback brasileiro: previsão diária CPTEC via BrasilAPI (sem chave). */
+  private async fetchCptec(city: string, days: number) {
+    const headers = { 'User-Agent': 'NovaMind/1.0 (assistente pessoal)' };
+    const cityRes = await fetch(
+      'https://brasilapi.com.br/api/cptec/v1/cidade/' +
+        encodeURIComponent(city),
+      { headers, signal: AbortSignal.timeout(8000) },
+    );
+    if (!cityRes.ok) return null;
+    const cities = (await cityRes.json()) as Array<{
+      id: number;
+      nome: string;
+      estado: string;
+    }>;
+    const place = cities[0];
+    if (!place) {
+      return {
+        error:
+          `Cidade "${city}" não encontrada. Peça ao usuário para repetir ` +
+          'o nome da cidade.',
+      };
+    }
+
+    const wxRes = await fetch(
+      `https://brasilapi.com.br/api/cptec/v1/clima/previsao/${place.id}/${Math.min(days, 6)}`,
+      { headers, signal: AbortSignal.timeout(8000) },
+    );
+    if (!wxRes.ok) return null;
+    const wx = (await wxRes.json()) as {
+      cidade: string;
+      estado: string;
+      clima: Array<{
+        data: string;
+        condicao: string;
+        condicao_desc: string;
+        min: number;
+        max: number;
+      }>;
+    };
+
+    return {
+      cidade: `${wx.cidade}, ${wx.estado}`,
+      previsao: wx.clima.map((d) => ({
+        data: d.data,
+        min: `${Math.round(d.min)}°C`,
+        max: `${Math.round(d.max)}°C`,
+        condicao: d.condicao_desc || d.condicao,
+      })),
+      fonte: 'CPTEC/INPE via BrasilAPI',
     };
   }
 
