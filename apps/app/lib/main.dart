@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 
 import 'state/auth_controller.dart';
@@ -8,7 +9,10 @@ import 'ui/screens/login_screen.dart';
 
 const _seed = Color(0xFF6366F1);
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // Necessário para o TableCalendar com locale pt_BR (tela de Agenda).
+  await initializeDateFormatting('pt_BR');
   runApp(const NovaMindApp());
 }
 
