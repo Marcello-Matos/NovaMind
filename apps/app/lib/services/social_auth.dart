@@ -24,8 +24,17 @@ class SocialAuthService {
 
   Future<void> _ensureGoogleInitialized() async {
     if (_googleInitialized) return;
+    // GOOGLE_CLIENT_ID (dart-define) é o Web Client ID. Passá-lo como
+    // clientId no iOS/Android sobrescreve o ID nativo e o fluxo OAuth
+    // abre e fecha sozinho. No mobile: clientId nulo → o SDK lê o
+    // GIDClientID do Info.plist (iOS) / config nativa (Android) e o
+    // Web ID vai como serverClientId, que é o papel dele aqui.
     await GoogleSignIn.instance.initialize(
-      clientId: Env.googleClientId.isEmpty ? null : Env.googleClientId,
+      clientId: kIsWeb && Env.googleClientId.isNotEmpty
+          ? Env.googleClientId
+          : null,
+      serverClientId:
+          !kIsWeb && Env.googleClientId.isNotEmpty ? Env.googleClientId : null,
     );
     _googleInitialized = true;
   }
