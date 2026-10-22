@@ -199,11 +199,12 @@ export class GoogleCalendarService {
     let nextSyncToken: string | null = null;
 
     // ----- Google -> app (incremental) -----
+    // Importante: com syncToken o Google rejeita orderBy/timeMin — só valem
+    // na primeira importação (full).
     const params = new URLSearchParams({
       maxResults: '2500',
       singleEvents: 'true',
       showDeleted: 'true',
-      orderBy: 'updated',
     });
     if (account.syncToken) {
       params.set('syncToken', account.syncToken);
@@ -211,6 +212,7 @@ export class GoogleCalendarService {
       const timeMin = new Date();
       timeMin.setUTCFullYear(timeMin.getUTCFullYear() - 1);
       params.set('timeMin', timeMin.toISOString());
+      params.set('orderBy', 'updated');
     }
     let url = `${GOOGLE_EVENTS_URL}?${params.toString()}`;
     while (url) {
@@ -269,7 +271,7 @@ export class GoogleCalendarService {
       }
       nextSyncToken = page.nextSyncToken ?? nextSyncToken;
       url = page.nextPageToken
-        ? `${GOOGLE_EVENTS_URL}?pageToken=${page.nextPageToken}&maxResults=2500&singleEvents=true&showDeleted=true`
+        ? `${GOOGLE_EVENTS_URL}?${params.toString()}&pageToken=${page.nextPageToken}`
         : '';
     }
 
