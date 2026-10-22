@@ -16,6 +16,7 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final _input = TextEditingController();
+  final _voiceKey = GlobalKey<VoiceInputButtonState>();
   List<Conversation> _conversations = [];
   List<ChatMessage> _messages = [];
   List<PendingAction> _pending = [];
@@ -133,13 +134,25 @@ class _ChatScreenState extends State<ChatScreen> {
       });
       _reload();
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      if (!mounted) return;
+      setState(() {
+        _error = e.message;
+        // A API descarta a pergunta sem resposta: devolve o texto ao campo
+        // para reenviar com um toque, sem duplicar na conversa.
+        if (content != null) {
+          _messages.removeWhere((m) => m.id == 'tmp');
+          if (_input.text.trim().isEmpty) _input.text = content;
+        }
+      });
     } finally {
       if (mounted) setState(() => _sending = false);
     }
   }
 
   Future<void> _send() async {
+    // Se o microfone ainda estiver ouvindo, para e descarta para que o
+    // reconhecedor não reescreva o campo depois do envio.
+    await _voiceKey.currentState?.cancel();
     final text = _input.text.trim();
     if (text.isEmpty) return;
     _input.clear();
@@ -411,6 +424,7 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               const SizedBox(width: 4),
               VoiceInputButton(
+                key: _voiceKey,
                 enabled: !_sending,
                 onPartial: (text) => _input.value = TextEditingValue(
                   text: text,

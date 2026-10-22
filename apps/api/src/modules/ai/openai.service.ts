@@ -1,6 +1,7 @@
 import {
   BadGatewayException,
   Injectable,
+  Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -18,6 +19,7 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'gpt-4o': { input: 2.5, output: 10.0 },
   'gemini-2.0-flash': { input: 0.1, output: 0.4 },
   'gemini-2.5-flash': { input: 0.3, output: 2.5 },
+  'gemini-2.5-flash-lite': { input: 0.1, output: 0.4 },
   'text-embedding-3-small': { input: 0.02, output: 0 },
   'text-embedding-3-large': { input: 0.13, output: 0 },
 };
@@ -25,28 +27,42 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
 /** Dimensão da coluna document_chunks.embedding (vector(1536)). */
 export const EMBEDDING_DIMENSIONS = 1536;
 
+/** Erros transitórios do provedor (sobrecarga/instabilidade). */
+const TRANSIENT_STATUSES = new Set([429, 500, 502, 503, 504]);
+
 @Injectable()
 export class OpenAiService {
+  private readonly logger = new Logger(OpenAiService.name);
   private client: OpenAI | null = null;
   readonly chatModel: string;
   readonly embeddingModel: string;
+  /** Modelo reserva quando o principal está sobrecarregado (null = sem). */
+  readonly fallbackChatModel: string | null;
 
   constructor(private readonly config: ConfigService) {
     const apiKey = config.get<string>('OPENAI_API_KEY');
+    const baseURL = config.get<string>('OPENAI_BASE_URL') || undefined;
     if (apiKey) {
       // Compatível com provedores alternativos que expõem a API da OpenAI:
       // Gemini (https://generativelanguage.googleapis.com/v1beta/openai),
       // Groq, OpenRouter etc. Basta definir OPENAI_BASE_URL + OPENAI_CHAT_MODEL.
-      this.client = new OpenAI({
-        apiKey,
-        baseURL: config.get<string>('OPENAI_BASE_URL') || undefined,
-      });
+      // maxRetries: o SDK repete 429/5xx com backoff exponencial.
+      this.client = new OpenAI({ apiKey, baseURL, maxRetries: 3, timeout: 60_000 });
     }
     this.chatModel = config.get<string>('OPENAI_CHAT_MODEL', 'gpt-4o-mini');
     this.embeddingModel = config.get<string>(
       'OPENAI_EMBEDDING_MODEL',
       'text-embedding-3-small',
     );
+    // Gemini 2.5 Flash devolve 503 "overloaded" em horários de pico; o
+    // Flash-Lite tem capacidade separada. Sobrescreva com
+    // OPENAI_FALLBACK_CHAT_MODEL (vazio em outros provedores = sem reserva).
+    const isGemini = baseURL?.includes('generativelanguage.googleapis.com');
+    const fallback = config.get<string>(
+      'OPENAI_FALLBACK_CHAT_MODEL',
+      isGemini ? 'gemini-2.5-flash-lite' : '',
+    );
+    this.fallbackChatModel = fallback && fallback !== this.chatModel ? fallback : null;
   }
 
   /**
@@ -87,34 +103,60 @@ export class OpenAiService {
         'OPENAI_API_KEY não configurada — defina a chave no .env',
       );
     }
-    try {
-      return await this.client.chat.completions.create({
-        model: this.chatModel,
+    const create = (model: string) =>
+      this.client!.chat.completions.create({
+        model,
         messages,
         tools: tools?.length ? tools : undefined,
         temperature: 0.4,
       });
+    try {
+      return await create(this.chatModel);
     } catch (err) {
-      // Erros da OpenAI viravam 500 genérico — mapeia para mensagens úteis.
-      if (err instanceof OpenAI.APIError) {
-        if (err.status === 401) {
-          throw new ServiceUnavailableException(
-            'OPENAI_API_KEY inválida ou revogada — gere uma nova em ' +
-              'platform.openai.com/api-keys',
-          );
-        }
-        if (err.status === 429) {
-          throw new ServiceUnavailableException(
-            'Provedor de IA sem créditos ou no limite de requisições — ' +
-              'verifique o billing/quota da chave configurada',
-          );
-        }
-        throw new BadGatewayException(
-          `Falha na OpenAI (${err.status ?? 'rede'}): ${err.message}`,
+      const transient =
+        err instanceof OpenAI.APIConnectionError ||
+        (err instanceof OpenAI.APIError && TRANSIENT_STATUSES.has(err.status ?? 0));
+      if (transient && this.fallbackChatModel) {
+        this.logger.warn(
+          `${this.chatModel} indisponível (${(err as Error).message}); usando ${this.fallbackChatModel}`,
         );
+        try {
+          return await create(this.fallbackChatModel);
+        } catch (fallbackErr) {
+          this.logger.warn(`Modelo reserva também falhou: ${fallbackErr}`);
+        }
       }
-      throw err;
+      throw this.mapError(err);
     }
+  }
+
+  /** Erros do provedor viravam 500 genérico — mapeia para mensagens úteis. */
+  private mapError(err: unknown): unknown {
+    if (err instanceof OpenAI.APIConnectionError) {
+      return new ServiceUnavailableException(
+        'Não foi possível falar com o provedor de IA agora. Tente novamente em instantes.',
+      );
+    }
+    if (!(err instanceof OpenAI.APIError)) return err;
+    if (err.status === 401 || err.status === 403) {
+      return new ServiceUnavailableException(
+        'Chave do provedor de IA inválida ou revogada — atualize OPENAI_API_KEY.',
+      );
+    }
+    if (err.status === 429) {
+      return new ServiceUnavailableException(
+        'O provedor de IA atingiu o limite de uso. Aguarde um pouco e tente de novo ' +
+          '(se persistir, verifique a quota/billing da chave).',
+      );
+    }
+    if (TRANSIENT_STATUSES.has(err.status ?? 0)) {
+      return new ServiceUnavailableException(
+        'O assistente está sobrecarregado no momento. Tente novamente em alguns segundos.',
+      );
+    }
+    return new BadGatewayException(
+      `Falha no provedor de IA (${err.status ?? 'rede'}): ${err.message}`,
+    );
   }
 
   estimateCostUsd(

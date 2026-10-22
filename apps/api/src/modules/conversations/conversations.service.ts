@@ -79,26 +79,37 @@ export class ConversationsService {
     }
     const conversation = await this.findAuthorized(userId, conversationId);
 
-    if (dto.content?.trim()) {
-      await this.prisma.message.create({
-        data: {
-          conversationId,
-          role: MessageRole.USER,
-          content: dto.content.trim(),
-        },
-      });
-    }
+    const userMessage = dto.content?.trim()
+      ? await this.prisma.message.create({
+          data: {
+            conversationId,
+            role: MessageRole.USER,
+            content: dto.content.trim(),
+          },
+        })
+      : null;
 
-    const result = await this.orchestrator.run({
-      userId,
-      organizationId: conversation.organizationId,
-      agent: conversation.agent,
-      conversationId,
-      confirmedToolCalls: dto.confirmedActions?.map((a) => ({
-        name: a.tool,
-        arguments: a.parameters,
-      })),
-    });
+    let result: Awaited<ReturnType<OrchestratorService['run']>>;
+    try {
+      result = await this.orchestrator.run({
+        userId,
+        organizationId: conversation.organizationId,
+        agent: conversation.agent,
+        conversationId,
+        confirmedToolCalls: dto.confirmedActions?.map((a) => ({
+          name: a.tool,
+          arguments: a.parameters,
+        })),
+      });
+    } catch (err) {
+      // Sem resposta da IA: remove a pergunta para o reenvio não duplicar.
+      if (userMessage) {
+        await this.prisma.message
+          .delete({ where: { id: userMessage.id } })
+          .catch(() => undefined);
+      }
+      throw err;
+    }
 
     const assistantMessage = await this.prisma.message.create({
       data: {
